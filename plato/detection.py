@@ -5,397 +5,6 @@ from astropy import constants as const
 from astropy import units as u
 
 
-class CDPPModel:
-    """
-    A class to model the Combined Differential
-    Photometric Precision in the PLATO mission, following
-    the description in Matuszewski+2023 (Section 4.3).
-    """
-
-    def __init__(
-        self,
-        f_mag11: float = 1.6e5,
-        k_jitter: float = 10e-6,
-        k_readout: float = 231.2,
-    ) -> None:
-        """
-        Initializes the noise model with reference parameters.
-
-        Parameters
-        ----------
-        f_mag11 : float, optional
-            The reference flux of a magnitude 11 star,
-            by default 1.6e5.
-        k_jitter : float, optional
-            The jitter noise, by default 10 ppm (10e-6).
-        k_readout : float, optional
-            The readout noise (electrons), by default
-            4*57.8 = 231.2.
-        """
-
-        self.f_mag11 = f_mag11
-        self.k_jitter = k_jitter
-        self.k_readout = k_readout
-
-    def calculate_flux(self, magnitude: float) -> float:
-        """
-        Calculates the flux of a star given its magnitude.
-
-        Parameters
-        ----------
-        magnitude : float
-            The apparent magnitude of the star.
-
-        Returns
-        -------
-        float
-            The flux of the star.
-        """
-        return self.f_mag11 * 10 ** (-0.4 * (magnitude - 11))
-
-    def sigma_jitter(self) -> float:
-        """
-        Calculates the jitter noise component.
-
-        Returns
-        -------
-        float
-            The jitter noise component.
-        """
-        return self.k_jitter
-
-    def sigma_readout(
-        self,
-        magnitude: float,
-        n_cameras: int,
-    ) -> float:
-        """
-        Calculates the readout noise component.
-
-        Parameters
-        ----------
-        magnitude : float
-            The apparent magnitude of the star.
-        n_cameras : int
-            The number of cameras observing the star.
-
-        Returns
-        -------
-        float
-            The readout noise component.
-        """
-        flux = self.calculate_flux(magnitude)
-        return self.k_readout / flux * np.sqrt(n_cameras * 144) * 1e-6
-
-    def sigma_photon_noise(self, magnitude: float) -> float:
-        """
-        Calculates the photon noise component.
-
-        Parameters
-        ----------
-        magnitude : float
-            The apparent magnitude of the star.
-
-        Returns
-        -------
-        float
-            The photon noise component.
-        """
-        return 1 / np.sqrt(self.calculate_flux(magnitude))
-
-    def sigma_stellar_variability(self, sigma_star: float = 10e-6) -> float:
-        """
-        Calculates the stellar variability noise component.
-
-        Parameters
-        ----------
-        sigma_star : float, optional
-            The standard deviation of the stellar variability, by
-            default 10e-6 (10 ppm).
-
-        Returns
-        -------
-        float
-            The stellar variability noise component.
-        """
-        return sigma_star
-
-    def _calculate_CDPP_squared(self, magnitude: float, n_cameras: int) -> float:
-        """
-        Calculates the square of the Combined Differential
-        Photometric Precision (CDPP).
-
-        Parameters
-        ----------
-        magnitude : float
-            The apparent magnitude of the star.
-        n_cameras : int
-            The number of cameras observing the star.
-
-        Returns
-        -------
-        float
-            The square of the CDPP.
-        """
-        sigma_jitter = self.sigma_jitter()
-        sigma_readout = self.sigma_readout(magnitude, n_cameras)
-        sigma_photon = self.sigma_photon_noise(magnitude)
-
-        cdpp_squared = sigma_jitter**2 + sigma_readout**2 + sigma_photon**2
-
-        return cdpp_squared
-
-    def calculate_CDPP(self, magnitude: float, n_cameras: int) -> float:
-        """
-        Calculates the Combined Differential Photometric Precision (CDPP).
-
-        Parameters
-        ----------
-        magnitude : float
-            The apparent magnitude of the star.
-        n_cameras : int
-            The number of cameras observing the star.
-
-        Returns
-        -------
-        float
-            The CDPP.
-        """
-        return np.sqrt(self._calculate_CDPP_squared(magnitude, n_cameras))
-
-    def calculate_CDPPeff(
-        self,
-        magnitude: float,
-        n_cameras: int,
-        sigma_star: float = 10e-6,
-    ) -> float:
-        """
-        Calculates the Effective Combined Differential
-        Photometric Precision (CDPPeff).
-
-        Parameters
-        ----------
-        magnitude : float
-            The apparent magnitude of the star.
-        n_cameras : int
-            The number of cameras observing the star.
-        sigma_star : float, optional
-            The standard deviation of the stellar variability, by
-            default 10e-6 (10 ppm).
-
-        Returns
-        -------
-        float
-            The CDPPeff.
-        """
-        cdpp_squared = self._calculate_CDPP_squared(magnitude, n_cameras)
-        sigma_stellar = self.sigma_stellar_variability(sigma_star)
-
-        cdpp_eff = np.sqrt(cdpp_squared + sigma_stellar**2)
-
-        return cdpp_eff
-
-
-class DetectionModel:
-    """
-    A class to calculate the signal-to-noise ratio (SNR) for
-    a transiting exoplanet, as described in Matuszewski+2023
-    (Section 4.2).
-    """
-
-    def __init__(self, cdpp_model: Optional[CDPPModel] = None) -> None:
-        """
-        Initializes the SNR model with a CDPPModel instance.
-
-        Parameters
-        ----------
-        cdpp_model : Optional[CDPPModel], optional
-            A CDPPModel instance, by default None, in which
-            case a new CDPPModel instance will be created with
-            default parameters.
-        """
-        if cdpp_model is None:
-            self.cdpp_model = CDPPModel()
-        else:
-            self.cdpp_model = cdpp_model
-
-    def calculate_transit_duration(
-        self,
-        porb: u.day,
-        r_star: u.Rsun,
-        a: u.AU,
-    ) -> u.hour:
-        """
-        Calculates the duration of a transit. Added a
-        correction factor to account for the finite size
-        of the star, see Seager & Mallén-Ornelas (2003).
-
-        Parameters
-        ----------
-        porb : u.day
-            The orbital period of the planet.
-        r_star : u.Rsun
-            The radius of the host star.
-        a : u.AU
-            The semi-major axis of the planet's orbit.
-
-        Returns
-        -------
-        u.hour
-            The duration of the transit.
-        """
-        t0 = porb * r_star / (np.pi * a)
-        correction_factor = (1 + r_star / a) ** 2
-        return (t0 * correction_factor).to(u.hour)
-
-    def calculate_semi_major_axis(
-        self,
-        porb: u.day,
-        m_star: u.Msun,
-    ) -> u.AU:
-        """
-        Calculates the semi-major axis of the planet's orbit
-        using Kepler's Third Law.
-
-        Parameters
-        ----------
-        porb : u.day
-            The orbital period of the planet.
-        m_star : u.Msun
-            The mass of the host star.
-
-        Returns
-        -------
-        u.AU
-            The semi-major axis of the planet's orbit.
-        """
-        numerator = const.G * m_star * porb**2  # type: ignore
-        denominator = 4 * np.pi**2
-        return ((numerator / denominator) ** (1 / 3)).to(u.AU)
-
-    def calculate_number_of_transits(
-        self,
-        t_mission: u.year,
-        porb: u.day,
-        t_transit: u.hour,
-    ) -> float:
-        """
-        Estimates the average number of transits during the mission,
-        accounting for the timing of the first transit. The number of
-        transits is calculated as the weighted average of cases where
-        the initial timing leads to N or N+1 transits.
-
-        Parameters
-        ----------
-        t_mission : u.year
-            The duration of the mission.
-        porb : u.day
-            The orbital period of the planet.
-        t_transit : u.hour
-            The duration of a single transit.
-
-        Returns
-        -------
-        float
-            The estimated number of transits.
-        """
-
-        N_transits = t_mission // porb  # number of N definitve transits
-        remainder = t_mission % porb  # additional time that may lead to N+1 transits
-
-        p_N_plus_one_transits = remainder / porb  # probability of N+1 transits
-        p_N_transits = 1 - p_N_plus_one_transits  # probability of N transits
-
-        return p_N_plus_one_transits * (N_transits + 1) + p_N_transits * N_transits
-
-    def calculate_snr(
-        self,
-        r_planet: u.Rearth,
-        r_star: u.Rsun,
-        porb: u.day,
-        m_star: u.Msun,
-        magnitude: float,
-        n_cameras: int,
-        t_mission: u.year = 2 * u.year,
-    ) -> float:
-        """
-        Calculates the signal-to-noise ratio (SNR) for a
-        transiting exoplanet.
-
-        Parameters
-        ----------
-        r_planet : u.Rearth
-            The radius of the planet.
-        r_star : u.Rsun
-            The radius of the host star.
-        porb : u.day
-            The orbital period of the planet.
-        m_star : u.Msun
-            The mass of the host star.
-        magnitude : float
-            The apparent magnitude of the star.
-        n_cameras : int
-            The number of cameras observing the star.
-        t_mission : u.year
-            The duration of the mission, by default 2 years.
-
-        Returns
-        -------
-        float
-            The signal-to-noise ratio (SNR).
-        """
-        a = self.calculate_semi_major_axis(porb, m_star)
-        t_transit = self.calculate_transit_duration(porb, r_star, a)
-        n_transits = self.calculate_number_of_transits(t_mission, porb, t_transit)
-
-        transit_depth = (r_planet / r_star) ** 2
-
-        cdpp_eff = (
-            self.cdpp_model.calculate_CDPPeff(magnitude, n_cameras) * u.hour**-0.5
-        )
-
-        noise = cdpp_eff / np.sqrt(t_transit.to(u.hour)) / np.sqrt(n_transits)
-
-        snr = transit_depth / noise
-        return snr.to(u.hour).value  # return SNR
-
-    def detection_efficiency(
-        self,
-        *args: Any,
-        lower_threshold: float = 6,
-        upper_threshold: float = 10,
-    ) -> float:
-        """
-        Calculates the detection efficiency as a linear function
-        of the signal-to-noise ratio (SNR), with a lower threshold
-        below which the efficiency is 0 and an upper threshold above
-        which the efficiency is 1.
-
-        Parameters
-        ----------
-        *args : tuple
-            The arguments to be passed to the calculate_snr method.
-        lower_threshold : float
-            The lower threshold below which the detection efficiency is 0,
-            by default 6.
-        upper_threshold : float
-            The upper threshold above which the detection efficiency is 1,
-            by default 10.
-
-        Returns
-        -------
-        float
-            The detection efficiency.
-        """
-        snr = self.calculate_snr(*args)
-        if snr < lower_threshold:
-            return 0.0
-        elif snr > upper_threshold:
-            return 1.0
-        else:
-            return (snr - lower_threshold) / (upper_threshold - lower_threshold)
-
-
 class NoiseModel:
     """
     A class to model the noise in the PLATO mission, following
@@ -778,7 +387,7 @@ class NoiseModel:
             + self.fee_offset_stability_noise(magnitude_v, n_cameras) ** 2
         )
 
-    def calculate_NSR(
+    def calculate_noise(
         self,
         magnitude_v: float,
         n_cameras: int,
@@ -819,3 +428,214 @@ class NoiseModel:
         )
 
         return np.sqrt(photometric_precision_squared + stellar_variability**2)
+
+
+class DetectionModel:
+    """
+    A class to calculate the signal-to-noise ratio (SNR) for
+    a transiting exoplanet, as described in Matuszewski+2023
+    (Section 4.2).
+    """
+
+    def __init__(self, cdpp_model: Optional[NoiseModel] = None) -> None:
+        """
+        Initializes the SNR model with a NoiseModel instance.
+
+        Parameters
+        ----------
+        cdpp_model : Optional[CDPPModel], optional
+            A CDPPModel instance, by default None, in which
+            case a new CDPPModel instance will be created with
+            default parameters.
+        """
+        if cdpp_model is None:
+            self.noise_model = NoiseModel()
+        else:
+            self.noise_model = cdpp_model
+
+    def calculate_transit_duration(
+        self,
+        porb: u.day,
+        r_star: u.Rsun,
+        a: u.AU,
+    ) -> u.hour:
+        """
+        Calculates the duration of a transit. Added a
+        correction factor to account for the finite size
+        of the star, see Seager & Mallén-Ornelas (2003).
+
+        Parameters
+        ----------
+        porb : u.day
+            The orbital period of the planet.
+        r_star : u.Rsun
+            The radius of the host star.
+        a : u.AU
+            The semi-major axis of the planet's orbit.
+
+        Returns
+        -------
+        u.hour
+            The duration of the transit.
+        """
+        t0 = porb * r_star / (np.pi * a)
+        correction_factor = (1 + r_star / a) ** 2
+        return (t0 * correction_factor).to(u.hour)
+
+    def calculate_semi_major_axis(
+        self,
+        porb: u.day,
+        m_star: u.Msun,
+    ) -> u.AU:
+        """
+        Calculates the semi-major axis of the planet's orbit
+        using Kepler's Third Law.
+
+        Parameters
+        ----------
+        porb : u.day
+            The orbital period of the planet.
+        m_star : u.Msun
+            The mass of the host star.
+
+        Returns
+        -------
+        u.AU
+            The semi-major axis of the planet's orbit.
+        """
+        numerator = const.G * m_star * porb**2  # type: ignore
+        denominator = 4 * np.pi**2
+        return ((numerator / denominator) ** (1 / 3)).to(u.AU)
+
+    def calculate_number_of_transits(
+        self,
+        t_mission: u.year,
+        porb: u.day,
+        t_transit: u.hour,
+    ) -> float:
+        """
+        Estimates the average number of transits during the mission,
+        accounting for the timing of the first transit. The number of
+        transits is calculated as the weighted average of cases where
+        the initial timing leads to N or N+1 transits.
+
+        Parameters
+        ----------
+        t_mission : u.year
+            The duration of the mission.
+        porb : u.day
+            The orbital period of the planet.
+        t_transit : u.hour
+            The duration of a single transit.
+
+        Returns
+        -------
+        float
+            The estimated number of transits.
+        """
+
+        N_transits = t_mission // porb  # number of N definitve transits
+        remainder = t_mission % porb  # additional time that may lead to N+1 transits
+
+        p_N_plus_one_transits = remainder / porb  # probability of N+1 transits
+        p_N_transits = 1 - p_N_plus_one_transits  # probability of N transits
+
+        return p_N_plus_one_transits * (N_transits + 1) + p_N_transits * N_transits
+
+    def calculate_snr(
+        self,
+        r_planet: u.Rearth,
+        r_star: u.Rsun,
+        porb: u.day,
+        m_star: u.Msun,
+        magnitude_v: float,
+        n_cameras: int,
+        t_mission: u.year = 2 * u.year,
+        stellar_variability: float = 10e-6,
+    ) -> float:
+        """
+        Calculates the signal-to-noise ratio (SNR) for a
+        transiting exoplanet.
+
+        Parameters
+        ----------
+        r_planet : u.Rearth
+            The radius of the planet.
+        r_star : u.Rsun
+            The radius of the host star.
+        porb : u.day
+            The orbital period of the planet.
+        m_star : u.Msun
+            The mass of the host star.
+        magnitude : float
+            The apparent magnitude of the star.
+        n_cameras : int
+            The number of cameras observing the star.
+        t_mission : u.year
+            The duration of the mission, by default 2 years.
+        stellar_variability : float
+            The standard deviation of the variability of the star
+            on timescales of ~1hr, assumed to be white noise, by default 10e-6.
+
+        Returns
+        -------
+        float
+            The signal-to-noise ratio (SNR).
+        """
+        a = self.calculate_semi_major_axis(porb, m_star)
+        t_transit = self.calculate_transit_duration(porb, r_star, a)
+        n_transits = self.calculate_number_of_transits(t_mission, porb, t_transit)
+
+        transit_depth = (r_planet / r_star) ** 2
+
+        # noise for a datapoint observed for 1 hour
+        noise_rate = (
+            self.noise_model.calculate_noise(
+                magnitude_v,
+                n_cameras,
+                stellar_variability,
+            )
+            * u.hour**-0.5
+        )
+
+        # noise integrated over entire transit(s)
+        noise = noise_rate / np.sqrt(t_transit.to(u.hour)) / np.sqrt(n_transits)
+
+        snr = transit_depth / noise
+        return snr.to(u.hour).value  # return SNR
+
+    def detection_efficiency(
+        self,
+        *args: Any,
+        lower_threshold: float = 6,
+        upper_threshold: float = 10,
+    ) -> float:
+        """
+        Calculates the detection efficiency as a linear function
+        of the signal-to-noise ratio (SNR), with a lower threshold
+        below which the efficiency is 0 and an upper threshold above
+        which the efficiency is 1.
+
+        Parameters
+        ----------
+        *args : tuple
+            The arguments to be passed to the calculate_snr method.
+        lower_threshold : float
+            The lower threshold below which the detection efficiency is 0,
+            by default 6.
+        upper_threshold : float
+            The upper threshold above which the detection efficiency is 1,
+            by default 10.
+
+        Returns
+        -------
+        float
+            The detection efficiency.
+        """
+        snr = self.calculate_snr(*args)
+        if snr < lower_threshold:
+            return 0.0
+        elif snr > upper_threshold:
+            return 1.0
+        else:
+            return (snr - lower_threshold) / (upper_threshold - lower_threshold)
