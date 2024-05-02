@@ -1,8 +1,9 @@
-from typing import Any, Optional
+from typing import Optional
 
 import numpy as np
 from astropy import constants as const
 from astropy import units as u
+from scipy.stats import gamma
 
 
 class NoiseModel:
@@ -387,7 +388,7 @@ class NoiseModel:
             + self.fee_offset_stability_noise(magnitude_v, n_cameras) ** 2
         )
 
-    def calculate_noise(
+    def calculate_NSR(
         self,
         magnitude_v: float,
         n_cameras: int,
@@ -507,17 +508,49 @@ class DetectionModel:
         denominator = 4 * np.pi**2
         return ((numerator / denominator) ** (1 / 3)).to(u.AU)
 
+    def calculate_p_N_plus_1_transits(
+        self,
+        t_mission: u.year,
+        porb: u.day,
+    ) -> float:
+        """
+        Calculates the probability
+        of having N+1 transits during the mission.
+
+        Parameters
+        ----------
+        t_mission : u.year
+            The duration of the mission.
+        porb : u.day
+            The orbital period of the planet.
+
+        Returns
+        -------
+        float
+            The probability
+            of having N+1 transits.
+
+        """
+        remainder = (
+            t_mission % porb
+        )  # additional time after N transits that may lead to N+1 transits
+        p_n_plus_one_transits = remainder / porb  # probability of N+1 transits
+        return p_n_plus_one_transits.decompose().value
+
     def calculate_number_of_transits(
         self,
         t_mission: u.year,
         porb: u.day,
-        t_transit: u.hour,
+        return_average: bool = False,
     ) -> float:
         """
         Estimates the average number of transits during the mission,
-        accounting for the timing of the first transit. The number of
-        transits is calculated as the weighted average of cases where
-        the initial timing leads to N or N+1 transits.
+        accounting for the timing of the first transit.
+        If return_average is True, the number of transits is
+        calculated as the weighted average of cases where
+        the initial transit timing timing leads to N or N+1 transits.
+        Otherwise N transits is returned (wher N is the guaranteed
+        number of transits).
 
         Parameters
         ----------
@@ -527,20 +560,23 @@ class DetectionModel:
             The orbital period of the planet.
         t_transit : u.hour
             The duration of a single transit.
-
+        return_average : bool, optional
+            If True, returns the average number of transits.
         Returns
         -------
         float
             The estimated number of transits.
         """
 
-        N_transits = t_mission // porb  # number of N definitve transits
-        remainder = t_mission % porb  # additional time that may lead to N+1 transits
+        n_transits = t_mission // porb  # number of N definitve transits
 
-        p_N_plus_one_transits = remainder / porb  # probability of N+1 transits
-        p_N_transits = 1 - p_N_plus_one_transits  # probability of N transits
+        if return_average:
+            p_n_plus_one_transits = self.calculate_p_N_plus_1_transits(t_mission, porb)
+            p_n_transits = 1 - p_n_plus_one_transits  # probability of N transits
 
-        return p_N_plus_one_transits * (N_transits + 1) + p_N_transits * N_transits
+            return p_n_plus_one_transits * (n_transits + 1) + p_n_transits * n_transits
+
+        return n_transits.decompose().value
 
     def calculate_snr(
         self,
@@ -552,6 +588,7 @@ class DetectionModel:
         n_cameras: int,
         t_mission: u.year = 2 * u.year,
         stellar_variability: float = 10e-6,
+        extra_transit: bool = False,
     ) -> float:
         """
         Calculates the signal-to-noise ratio (SNR) for a
@@ -576,6 +613,12 @@ class DetectionModel:
         stellar_variability : float
             The standard deviation of the variability of the star
             on timescales of ~1hr, assumed to be white noise, by default 10e-6.
+        extra_transit : bool
+            If True, an additional transit is assumed to be observed,
+            by default False. This is useful, since the estimated
+            number of transits is the lower (guaranteed) number of transits,
+            but depending on the timing of the first transit, an additional
+            transit may be observed.
 
         Returns
         -------
@@ -584,13 +627,16 @@ class DetectionModel:
         """
         a = self.calculate_semi_major_axis(porb, m_star)
         t_transit = self.calculate_transit_duration(porb, r_star, a)
-        n_transits = self.calculate_number_of_transits(t_mission, porb, t_transit)
+        n_transits = self.calculate_number_of_transits(t_mission, porb)
+
+        if extra_transit:
+            n_transits += 1
 
         transit_depth = (r_planet / r_star) ** 2
 
-        # noise for a datapoint observed for 1 hour
+        # calculate noise-to-signal ratio for an observation of 1 hour
         noise_rate = (
-            self.noise_model.calculate_noise(
+            self.noise_model.calculate_NSR(
                 magnitude_v,
                 n_cameras,
                 stellar_variability,
@@ -601,41 +647,211 @@ class DetectionModel:
         # noise integrated over entire transit(s)
         noise = noise_rate / np.sqrt(t_transit.to(u.hour)) / np.sqrt(n_transits)
 
+        # note:
+        # noise is technically a noise-to-signal-ratio, not noise in itself,
+        # but the transit depth "signal" should also be multiplied by the
+        # signal (in terms of flux or photoelectrons), meaning that the
+        # values cancel out in the SNR calculation.
+        # The confusion potential confusion here stems from the fact that
+        # in the noise model above, the "signal" corresponds to the measured
+        # flux value, while in the detection model the "signal" corresponds to
+        # the transit depth.
+
         snr = transit_depth / noise
         return snr.to(u.hour).value  # return SNR
 
-    def detection_efficiency(
-        self,
-        *args: Any,
+    @staticmethod
+    def linear_detection_efficiency(
+        snr: float | np.ndarray,
         lower_threshold: float = 6,
         upper_threshold: float = 10,
-    ) -> float:
+    ) -> float | np.ndarray:
         """
-        Calculates the detection efficiency as a linear function
-        of the signal-to-noise ratio (SNR), with a lower threshold
-        below which the efficiency is 0 and an upper threshold above
-        which the efficiency is 1.
+        Calculates the detection efficiency as a function
+        of the signal-to-noise ratio (SNR) using a linear model.
+        The efficiency is a linear function of the SNR, with a lower
+        threshold below which the efficiency is 0 and an upper threshold
+        above which the efficiency is 1, from Fressin+2013.
 
         Parameters
         ----------
-        *args : tuple
-            The arguments to be passed to the calculate_snr method.
-        lower_threshold : float
-            The lower threshold below which the detection efficiency is 0,
-            by default 6.
-        upper_threshold : float
-            The upper threshold above which the detection efficiency is 1,
-            by default 10.
+        snr : float
+            The signal-to-noise ratio.
+        lower_threshold : float, optional
+            The lower threshold below which the detection
+            efficiency is 0, by default 6 (Fressin+2013).
+        upper_threshold : float, optional
+            The upper threshold above which the detection
+            efficiency is 1, by default 10 (taken from the
+            Plato Red book, which assumes a 100% efficiency
+            for an snr>10).
 
         Returns
         -------
         float
-            The detection efficiency.
+            The detection efficiency as a function of the SNR.
         """
-        snr = self.calculate_snr(*args)
         if snr < lower_threshold:
             return 0.0
         elif snr > upper_threshold:
             return 1.0
         else:
             return (snr - lower_threshold) / (upper_threshold - lower_threshold)
+
+    @staticmethod
+    def gamma_detection_efficiency(
+        snr: float | np.ndarray,
+        gamma_a: float = 30.87,
+        gamma_b: float = 0.271,
+        gamma_c: float = 0.940,
+    ) -> float | np.ndarray:
+        """
+        Calculates the detection efficiency as a function
+        of the signal-to-noise ratio (SNR) using a gamma distribution model.
+        The efficiency is a gamma cumulative distribution function (CDF) of the SNR,
+        from Christiansen+2016, Christiansen+2017.
+
+        Parameters
+        ----------
+        snr : float | np.ndarray
+            The signal-to-noise ratio.
+        gamma_a : float, optional
+            The shape parameter of the gamma distribution,
+            by default 30.87 (Christiansen+2017).
+        gamma_b : float, optional
+            The scale parameter of the
+            gamma distribution, by default 0.271 (Christiansen+2017).
+        gamma_c : float, optional
+            The overall normalisation parameter of the
+            gamma distribution, by default 0.940 (Christiansen+2017).
+
+
+        Returns
+        -------
+        float | np.ndarray
+            The detection efficiency as a function of the SNR.
+        """
+        return gamma_c * gamma.cdf(snr, a=gamma_a, loc=0, scale=gamma_b)
+
+    def detection_efficiency(
+        self,
+        r_planet: u.Rearth,
+        r_star: u.Rsun,
+        porb: u.day,
+        m_star: u.Msun,
+        magnitude_v: float,
+        n_cameras: int,
+        *,
+        t_mission: u.year = 2 * u.year,
+        stellar_variability: float = 10e-6,
+        min_transits: int = 2,
+        mode: str = "gamma",
+        kwargs_detection_efficiency: Optional[dict] = None,
+    ) -> float | np.ndarray:
+        """
+        Calculates the detection efficiency as a function
+        of the signal-to-noise ratio (SNR). Two models are
+        implemented:
+        - A linear model, where the efficiency is a linear function
+        of the SNR, with a lower threshold below which the efficiency
+        is 0 and an upper threshold above which the efficiency is 1,
+        from Fressin+2013.
+        - A gamma model, where the efficiency is a gamma cumulative
+        distribution function (CDF) of the SNR, from
+        Christiansen+2016, Christiansen+2017.
+
+        The detection efficiency is calculated for N and N+1 transits,
+        and the final efficiency is a weighted average of the two
+        efficiencies, where the weight is the probability of observing
+        N+1 transits. If the number of transits is below a certain
+        threshold (min_transits), the efficiency is set to 0.
+
+        Parameters
+        ----------
+        r_planet : u.Rearth
+            The radius of the planet.
+        r_star : u.Rsun
+            The radius of the host star.
+        porb : u.day
+            The orbital period of the planet.
+        m_star : u.Msun
+            The mass of the host star.
+        magnitude : float
+            The apparent magnitude of the star.
+        n_cameras : int
+            The number of cameras observing the star.
+        t_mission : u.year
+            The duration of the mission, by default 2 years.
+        stellar_variability : float
+            The standard deviation of the variability of the star
+            on timescales of ~1hr, assumed to be white noise, by default 10e-6.
+        min_transits : int, optional
+            The minimum number of transits required to detect planet, by default 2.
+            If the number of transits is below this threshold, the efficiency is
+            set to 0.
+        mode : str, optional
+            The mode to calculate the detection efficiency, either
+            "linear" or "gamma", by default "linear".
+        Returns
+        -------
+        float | np.ndarray
+            The detection efficiency as a function of the SNR.
+
+        Raises
+        ------
+        ValueError
+            Raised if mode is not "linear" or "gamma".
+        """
+        if kwargs_detection_efficiency is None:
+            kwargs_detection_efficiency = {}
+
+        # calculate signal-to-noise ratio for N and N+1 transits
+        snr_args = {
+            "r_planet": r_planet,
+            "r_star": r_star,
+            "porb": porb,
+            "m_star": m_star,
+            "magnitude_v": magnitude_v,
+            "n_cameras": n_cameras,
+            "t_mission": t_mission,
+            "stellar_variability": stellar_variability,
+        }
+        snr_n_transits = self.calculate_snr(**snr_args)
+        snr_n_plus_one_transits = self.calculate_snr(**snr_args, extra_transit=True)
+        snr_values = [snr_n_transits, snr_n_plus_one_transits]
+
+        # Calculate number of certain transits (N) and probability of N+1 transits
+        n_transits = self.calculate_number_of_transits(t_mission, porb)
+        p_n_plus_one_transits = self.calculate_p_N_plus_1_transits(t_mission, porb)
+        p_n_transits = 1 - p_n_plus_one_transits
+
+        # Calculate detection efficiencies for N and N+1 transits, depending on
+        # detection efficiency model
+        detection_eff = []
+        if mode == "linear":
+            for snr in snr_values:
+                detection_eff.append(
+                    self.linear_detection_efficiency(
+                        snr,
+                        **kwargs_detection_efficiency,
+                    )
+                )
+        elif mode == "gamma":
+            for snr in snr_values:
+                detection_eff.append(
+                    self.gamma_detection_efficiency(
+                        snr,
+                        **kwargs_detection_efficiency,
+                    )
+                )
+        else:
+            raise ValueError("Invalid mode. Choose 'linear' or 'gamma'.")
+
+        # Set detection efficiency to 0 if number of transits is below threshold
+        detection_eff[0] = np.where(n_transits >= min_transits, detection_eff[0], 0)
+        detection_eff[1] = np.where(n_transits + 1 >= min_transits, detection_eff[1], 0)
+
+        # Return weighted average of detection efficiencies
+        return (
+            p_n_transits * detection_eff[0] + p_n_plus_one_transits * detection_eff[1]
+        )
