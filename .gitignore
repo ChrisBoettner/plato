@@ -5,6 +5,7 @@
 *.hdf5
 *.ewah
 *.csv
+*fits
 
 # exclude data from source control by default
 #/data

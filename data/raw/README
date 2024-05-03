@@ -1,0 +1,4 @@
+plato_targets.csv : Plato asPIC IDs crossmatched with Gaia data, an classified into thin disc (2), thick disc (1) and halo (0). By Akshara (v March 24th 2024), 
+		    num_CCD column(s) added using the code in notebook 01_plato_targets
+		    
+plato_targets_LOPS2.csv: Subselection of plato_targets in LOPS field (num_CCD_LOPS2 > 0)
