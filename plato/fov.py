@@ -11,9 +11,9 @@ from tqdm import tqdm
 from plato.platopoint import platopoint  # type: ignore
 
 
-def count_CCDs(source: SkyCoord, **kwargs: Any) -> int:
-    """Count the number of Plato CCDs that a particular
-    source falls on (for a given plato pointing which
+def count_cameras(source: SkyCoord, **kwargs: Any) -> int:
+    """Count the number of Plato cameras that observe particular
+    source (for a given plato pointing which
     can be changed with kwargs). Default pointing is the
     LOPS2 field.
 
@@ -38,7 +38,9 @@ def count_CCDs(source: SkyCoord, **kwargs: Any) -> int:
         num_CCDs = sum(1 for val in on_CCD if val is not None)
     else:
         num_CCDs = 0
-    return num_CCDs
+
+    n_cameras = 6 * num_CCDs
+    return n_cameras
 
 
 def find_targets(
@@ -81,7 +83,9 @@ def find_targets(
     with Pool(processes) as pool:
         targets = list(
             tqdm(
-                pool.imap(partial(count_CCDs, **kwargs), data_coords),  # type: ignore
+                pool.imap(
+                    partial(count_cameras, **kwargs), data_coords
+                ),  # type: ignore
                 total=len(data_coords),
                 disable=not progress,
                 desc="Targets: ",
@@ -89,7 +93,7 @@ def find_targets(
         )
 
     if isinstance(data, pdDataFrame):
-        data["num_CCDs"] = targets
+        data["n_cameras"] = targets
     else:
-        data = data.with_columns(num_CCDs=polars.Series(targets))
+        data = data.with_columns(n_cameras=polars.Series(targets))
     return data

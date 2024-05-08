@@ -1,8 +1,5 @@
-asPIC_gaia_IDs.csv: 
-    Gaia IDs from the the all-sky Plato input catalogue bty Montalto2021
-
 asPIC_1.1.fits: 
-    full asPIC 1.1 (DOI 10.17909/t9-8msm-xh08).
+    full asPIC 1.1 catalogue (DOI 10.17909/t9-8msm-xh08) by Montalto2021.
     
 galah.fits:
 	GALAH catalogue, specifically GALAH_DR3_main_allstar_v2.fits
@@ -10,3 +7,6 @@ galah.fits:
 apogee.fits:
 	Apogee catalogue, specifically allStarLite-dr17-synspec_rev1.fits
 	
+xgboost.csv
+	Catalogue of Gaia metallicity, temperature, log_g estimates using machine-learning (DOI 10.5281/zenodo.7599788) from 
+	Andrae2023 (specifically using xgboost)

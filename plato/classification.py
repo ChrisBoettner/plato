@@ -1,9 +1,10 @@
+from typing import Optional
+
 import astropy.units as u
 import numpy as np
 import pandas as pd
 from astropy.coordinates import SkyCoord
 from galpy.orbit import Orbit
-from typing import Optional
 from scipy.stats import norm
 
 
@@ -40,7 +41,7 @@ def calculate_galactic_velocities(
     coord = SkyCoord(
         ra=dataframe["ra"].to_numpy() * u.degree,
         dec=dataframe["dec"].to_numpy() * u.degree,
-        distance=(1 / dataframe["parallax"].to_numpy()) * u.pc,
+        distance=(1000 / dataframe["parallax"].to_numpy()) * u.pc,
         pm_ra_cosdec=dataframe["pmra"].to_numpy() * u.mas / u.yr,
         pm_dec=dataframe["pmdec"].to_numpy() * u.mas / u.yr,
         radial_velocity=dataframe["radial_velocity"].to_numpy() * u.km / u.s,
@@ -225,6 +226,7 @@ def classify_stars(
     dataframe: pd.DataFrame,
     lower_cut: float = 0.1,
     upper_cut: float = 10,
+    include_probabilities: bool = False,
     overwrite: bool = False,
     raise_errors: bool = True,
 ) -> pd.DataFrame:
@@ -276,6 +278,11 @@ def classify_stars(
         e.g. the relative probabiltiy thick disk/thin
         disk is above this value, the star is classified
         as thick disk, by default 10.
+    include_probabilities : bool, optional
+        If True, include the relative probabilities
+        thick disk/thin disk and thick disk/halo in the
+        output dataframe, by default False. If True, the
+        columns names are 'TD/D' and 'TD/H'.
     overwrite : bool, optional
         If True, overwrite the 'Population' column if it
         already exists, by default False.
@@ -318,16 +325,21 @@ def classify_stars(
     # calculate relative probabilities between thick disk and halo
     h_td = relative_probability(u, v, w, "halo", "thick disk")
 
+    if include_probabilities:
+        new_df["TD/D"] = td_d
+        new_df["TD/H"] = 1 / h_td
+
     # classify stars
     populations = {
-        "Thin Disk": (td_d < lower_cut),
+        "Thin Disk": (td_d <= lower_cut),
         "Thick Disk Candidate": ((td_d > lower_cut) & (td_d < upper_cut)),
-        "Thick Disk": (td_d > upper_cut),
+        "Thick Disk": (td_d >= upper_cut),
         "Halo Candidate": ((h_td > lower_cut) & (h_td < upper_cut)),
-        "Halo": (h_td > upper_cut),
+        "Halo": (h_td >= upper_cut),
     }
 
-    new_df["Population"] = "Unknown"
+    new_df["Population"] = np.nan
+    new_df["Population"] = new_df["Population"].astype("str")
     for population, mask in populations.items():
         # Halo and Halo Candidate stars should be subset
         # of Thick Disk Candidate stars that were already classified
@@ -343,7 +355,87 @@ def classify_stars(
         new_df.loc[mask, "Population"] = population
 
     # check if all stars are classified
-    if (new_df["Population"] == "Unknown").any() and raise_errors:
-        raise RuntimeError("Some stars are not classified.")
+    if (new_df["Population"].isna()).any() and raise_errors:
+        raise RuntimeError(
+            "Some stars are not classified. A common cause are "
+            "NaN values in the input dataframe. Check probabilities using "
+            "include_probabilities=True."
+        )
+    return new_df
+
+
+def quality_cuts(
+    dataframe: pd.DataFrame,
+    max_error: float = 0.2,
+    error_type: str = "relative",
+    remove_nans: bool = True,
+    checked_columns: list = [
+        "ra",
+        "dec",
+        "pmra",
+        "pmdec",
+        "parallax",
+        "radial_velocity",
+    ],
+) -> pd.DataFrame:
+    """
+    Apply quality cuts to the input dataframe. The cuts are based
+    on the relative or absolute errors of the columns in the
+    checked_columns list. The stars with errors larger than
+    max_error are removed. Error columns must be named as
+    {column}_error.
+
+
+    Parameters
+    ----------
+    dataframe : pd.DataFrame
+        The input dataframe.
+    max_error : float, optional
+        The maximum relative or absolute error allowed
+        for the columns in checked_columns, by default 0.2.
+    error_type : str, optional
+        The error type, either 'relative' or 'absolute',
+        by default 'relative'.
+    remove_nans : bool, optional
+        If True, remove rows with NaN values in the
+        checked_columns, by default True.
+    checked_columns : list, optional
+        The columns to apply the quality cuts to, by default
+        ["ra", "dec", "pmra", "pmdec", "parallax", "radial_velocity"].
+
+    Returns
+    -------
+    pd.DataFrame
+        The input dataframe with the quality cuts applied.
+
+    """
+    new_df = dataframe.copy()
+
+    # remove NaN values
+    if remove_nans:
+        new_df = new_df.dropna(subset=checked_columns)
+
+    # remove stars with large errors
+    if error_type == "relative":
+        error = new_df["parallax_error"] / new_df["parallax"]
+    elif error_type == "absolute":
+        error = new_df["parallax_error"]
+    else:
+        raise ValueError(f"Error type {error_type!r} not recognized.")
+
+    for column in checked_columns:
+        if error_type == "relative":
+            error = new_df[f"{column}_error"] / new_df[column]
+        elif error_type == "absolute":
+            error = new_df[f"{column}_error"]
+        else:
+            raise ValueError(
+                f"Error type {error_type!r} not recognized."
+                " Must be 'relative' or 'absolute'."
+            )
+        if column in new_df.columns:
+            new_df = new_df[error < max_error]
+        else:
+            raise ValueError(f"Column {column!r} not found in dataframe.")
 
     return new_df
