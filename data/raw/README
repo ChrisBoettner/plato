@@ -1,18 +1,19 @@
-plato_targets.csv : Plato asPIC IDs crossmatched with Gaia data, an classified into thin disc (2), thick disc (1) and halo (0). By Akshara (v March 24th 2024), 
-		    num_CCD column(s) added using the code in notebook 01_plato_targets
-		    
-		    furher added are columns from for [Fe/H] metallicity and [alpha/Fe]
-		    columns: 
-		    	- mh_xgboost: [Fe/H] metallicities based on Gaia low resolution XP spectrophotometry
-		    	- mh_gspspec: [Fe/H] metallicities based on Gaia RVS medium resolution spectra
-		    	- alphafe_gspspec: [alpha/Fe] based on Gaia RVS medium resolution spectra
-		    	
-		    the original data is found in the kapteyn intranet (kapteyn.astro.rug.nl):
-		    net/gaia2/data/users/viswanathan/plato-exoplanets
-		    files:
-		    	gaia_columns_plato_targets_classified_vMar24.csv
-		    	gaia_columns_plato_targets_classified_vMar24_feh_andrae.csv (mh_xgboost column)
-		    	gaia_columns_plato_targets_classified_vMar24_gspspec_alpha_fe.csv (mh_xgboost, alphafe_gspspec columns)
-		    
+plato_targets.csv: 
+	Plato asPIC IDs crossmatched with Gaia data, classified into thin disc (2), thick disc (1), and halo (0). 
+	By Akshara (v March 24th 2024).
 
-plato_targets_LOPS2.csv: Subselection of plato_targets in LOPS field (num_CCD_LOPS2 > 0)
+	Columns added:
+	- num_CCD: added using the code in notebook 01_plato_targets
+	- mh_xgboost: [Fe/H] metallicities based on Gaia low-resolution XP spectrophotometry
+	- mh_gspspec: [Fe/H] metallicities based on Gaia RVS medium-resolution spectra
+	- alphafe_gspspec: [alpha/Fe] based on Gaia RVS medium-resolution spectra
+
+	The original data is found in the Kapteyn intranet (kapteyn.astro.rug.nl):
+	net/gaia2/data/users/viswanathan/plato-exoplanets
+	Files:
+	- gaia_columns_plato_targets_classified_vMar24.csv
+	- gaia_columns_plato_targets_classified_vMar24_feh_andrae.csv (mh_xgboost column)
+	- gaia_columns_plato_targets_classified_vMar24_gspspec_alpha_fe.csv (mh_xgboost, alphafe_gspspec columns)
+
+plato_targets_LOPS2.csv: 
+Subselection of plato_targets in LOPS field (num_CCD_LOPS2 > 0)
