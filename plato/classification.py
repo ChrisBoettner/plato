@@ -134,6 +134,8 @@ def relative_probability(
     component_dict or by stand-alone dictionaries with the necessary
     parameters.
 
+    Classification based on Bensby et al. (2003) and Bensby et al. (2014).
+
     If component_dict is None, the default components are:
     - thin disk: X=0.94, sigma_U=35, sigma_V=20, sigma_W=16, V_asym=-15
     - thick disk: X=0.06, sigma_U=67, sigma_V=38, sigma_W=35, V_asym=-46
@@ -217,9 +219,21 @@ def relative_probability(
     assert isinstance(component_1, dict)
     assert isinstance(component_2, dict)
 
-    prob_1 = component_probability(U, V, W, component_1)
-    prob_2 = component_probability(U, V, W, component_2)
-    return component_1["X"] * prob_1 / (component_2["X"] * prob_2)
+    prob_1 = np.asarray(component_probability(U, V, W, component_1))
+    prob_2 = np.asarray(component_probability(U, V, W, component_2))
+
+    # calculate relative probabilities, deal with division by zero
+    relative_probabilities = np.full_like(prob_1, np.nan, dtype=float)
+
+    relative_probabilities[(prob_1 == 0.0) | (prob_2 > 0.0)] = 0
+    relative_probabilities[(prob_1 > 0.0) & (prob_2 == 0.0)] = np.inf
+    relative_probabilities[(prob_1 != 0.0) & (prob_2 != 0.0)] = (
+        component_1["X"]
+        / component_2["X"]
+        * prob_1[(prob_1 != 0.0) & (prob_2 != 0.0)]
+        / prob_2[(prob_1 != 0.0) & (prob_2 != 0.0)]
+    )
+    return relative_probabilities
 
 
 def classify_stars(
@@ -327,7 +341,7 @@ def classify_stars(
 
     if include_probabilities:
         new_df["TD/D"] = td_d
-        new_df["TD/H"] = 1 / h_td
+        new_df["TD/H"] = np.where(h_td == 0, np.inf, 1 / h_td)
 
     # classify stars
     populations = {
@@ -369,6 +383,7 @@ def quality_cuts(
     max_error: float = 0.2,
     error_type: str = "relative",
     remove_nans: bool = True,
+    remove_negative_parallaxes: bool = True,
     checked_columns: list = [
         "ra",
         "dec",
@@ -377,6 +392,7 @@ def quality_cuts(
         "parallax",
         "radial_velocity",
     ],
+    verbose: bool = True,
 ) -> pd.DataFrame:
     """
     Apply quality cuts to the input dataframe. The cuts are based
@@ -399,9 +415,14 @@ def quality_cuts(
     remove_nans : bool, optional
         If True, remove rows with NaN values in the
         checked_columns, by default True.
+    remove_negative_parallaxes : bool, optional
+        If True, remove stars with negative parallaxes,
+        by default True.
     checked_columns : list, optional
         The columns to apply the quality cuts to, by default
         ["ra", "dec", "pmra", "pmdec", "parallax", "radial_velocity"].
+    verbose : bool, optional
+        If True, print the number of stars removed, by default True.
 
     Returns
     -------
@@ -415,14 +436,11 @@ def quality_cuts(
     if remove_nans:
         new_df = new_df.dropna(subset=checked_columns)
 
-    # remove stars with large errors
-    if error_type == "relative":
-        error = new_df["parallax_error"] / new_df["parallax"]
-    elif error_type == "absolute":
-        error = new_df["parallax_error"]
-    else:
-        raise ValueError(f"Error type {error_type!r} not recognized.")
+    # remove negative and zero parallaxes
+    if remove_negative_parallaxes:
+        new_df = new_df[new_df["parallax"] >= 0]
 
+    # remove stars with large errors
     for column in checked_columns:
         if error_type == "relative":
             error = new_df[f"{column}_error"] / new_df[column]
@@ -437,5 +455,11 @@ def quality_cuts(
             new_df = new_df[error < max_error]
         else:
             raise ValueError(f"Column {column!r} not found in dataframe.")
+
+    if verbose:
+        print(
+            f"Removed {len(dataframe) - len(new_df)}/{len(dataframe)} stars based on "
+            f"quality cuts ({(len(dataframe) - len(new_df)) / len(new_df) * 100:.1f}%)."
+        )
 
     return new_df
