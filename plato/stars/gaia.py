@@ -1,7 +1,8 @@
+from typing import Callable
+
 from astropy.table import Table, vstack
 from astroquery.gaia import Gaia
 from tqdm import tqdm
-from typing import Callable
 
 
 def query(

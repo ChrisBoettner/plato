@@ -1,14 +1,17 @@
+import warnings
+from functools import partial
 from multiprocessing import Pool
 from typing import Any, Optional
-from functools import partial
 
+import astropy.units as u
+import numpy as np
 import polars
 from astropy.coordinates import SkyCoord
 from pandas import DataFrame as pdDataFrame
 from polars import DataFrame as plDataFrame
 from tqdm import tqdm
 
-from plato.platopoint import platopoint  # type: ignore
+from plato.field.platopoint import platopoint  # type: ignore
 
 
 def count_cameras(source: SkyCoord, **kwargs: Any) -> int:
@@ -45,6 +48,7 @@ def count_cameras(source: SkyCoord, **kwargs: Any) -> int:
 
 def find_targets(
     data: pdDataFrame | plDataFrame,
+    field: str | dict = "LOPS2",
     progress: bool = True,
     processes: Optional[int] = None,
     **kwargs: Any
@@ -73,6 +77,44 @@ def find_targets(
     if not isinstance(data, (pdDataFrame, plDataFrame)):
         raise ValueError("data must be a (pandas or polars) DataFrame.")
 
+    if kwargs is None:
+        kwargs = {}
+
+    if field == "LOPS2":
+        kwargs["platformCoord"] = SkyCoord(
+            "06:21:14.5 -47:53:13",
+            unit=(u.hourangle, u.deg),
+        )
+        kwargs["rotationAngle"] = np.deg2rad(14.0)
+
+    elif isinstance == "LOPN1":
+        warnings.warn(
+            "LOPN1 is not fully confirmed. "
+            "Check updates on pointings before, "
+            "and confirm rotationAngle."
+        )
+        kwargs["platformCoord"] = SkyCoord(
+            "18:28:43.2 52:51:34",
+            unit=(u.hourangle, u.deg),
+        )
+        kwargs["rotationAngle"] = np.deg2rad(14.0)
+
+    elif isinstance(field, dict):
+        # check if field is a dictionary with SkyCoord and rotationAngle
+        if not all(key in field.keys() for key in ["platformCoord", "rotationAngle"]):
+            raise ValueError(
+                "field must be a dictionary with 'platformCoord' and "
+                "'rotationAngle' keys."
+            )
+        assert isinstance(field, dict)
+        kwargs["platformCoord"] = field["platformCoord"]
+        kwargs["rotationAngle"] = field["rotationAngle"]
+    else:
+        raise ValueError(
+            "field must be 'LOPS2', 'LOPN1', or a dictionary "
+            "with 'platformCoord' and 'rotationAngle' keys."
+        )
+
     try:
         data_coords = SkyCoord(ra=data["ra"], dec=data["dec"], unit="deg")
     except KeyError | polars.exceptions.ColumnNotFoundError:
@@ -83,9 +125,7 @@ def find_targets(
     with Pool(processes) as pool:
         targets = list(
             tqdm(
-                pool.imap(
-                    partial(count_cameras, **kwargs), data_coords
-                ),  # type: ignore
+                pool.imap(partial(count_cameras, **kwargs), data_coords),
                 total=len(data_coords),
                 disable=not progress,
                 desc="Targets: ",

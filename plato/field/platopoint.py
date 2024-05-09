@@ -1875,6 +1875,7 @@ def platopoint(
     mappedDistortion=False,
     distortionCoefficients=None,
     pathToPsfFile=None,
+    rotationAngle=0.0,
 ):
     """Get the CCD and pixel coordinates.
 
@@ -1912,6 +1913,8 @@ def platopoint(
         Coefficients of the polynomial describing the distortion for anlytic psf
     pathToPsfFile : str
         Path to the PSF file (HDF5) for mapped PSFs to calculate mapped distortion
+    rotatationAngle: float
+        Angle by which to rotate the entire FoV. Added later and still WIP. [rad]
 
     Return
     ------
@@ -1927,7 +1930,7 @@ def platopoint(
     """
     azimuthAngles = np.deg2rad([45.0, 135.0, 225.0, 315.0])
     tiltAngles = np.deg2rad([9.2, 9.2, 9.2, 9.2])
-    solarPanelOrientation = np.pi * (Quarter - 1) / 2
+    solarPanelOrientation = np.pi * (Quarter - 1) / 2 + rotationAngle
 
     # Make sure that for the respective field distortion the proper information is given.
 
