@@ -1,15 +1,95 @@
-from typing import Optional
-
 import astropy.units as u
 import numpy as np
 import pandas as pd
 from astropy.coordinates import SkyCoord
 from galpy.orbit import Orbit
 from scipy.stats import norm
+from tqdm import tqdm
 
 KINEMATICS_TABLE = pd.read_csv(
     "/home/chris/Documents/Projects/plato/data/external/kinematic_characteristics.csv"
 )
+
+
+def get_kinematic_parameter(
+    Z: float | np.ndarray,
+    R: float | np.ndarray,
+    progress: bool = True,
+) -> pd.DataFrame:
+    """
+    Get the kinematic characteristics of the Galactic components
+    Thin Disk, Thick Disk, and Halo at a given position in the
+    Galactic plane (Z, R), following Chen2021.
+
+    Parameters
+    ----------
+    Z : float | np.ndarray
+        The distance from the Galactic plane in kpc.
+    R : float | np.ndarray
+        The distance from the Galactic center in the
+        Galactic plane in kpc.
+    progress : bool, optional
+        If True, show a progress bar, by default True.
+
+    Returns
+    -------
+    pd.DataFrame
+        A dataframe containing the kinematic characteristics
+        of the Galactic component at the given position. The
+        characteristics are:
+            - sigma_U: The velocity dispersion in U in km/s.
+            - sigma_V: The velocity dispersion in V in km/s.
+            - sigma_W: The velocity dispersion in W in km/s.
+            - V_asym: The mean velocity in V in km/s.
+            - X: The relative fraction of the component.
+        The output dataframe contains each of these values
+        for the Thin Disk, Thick Disk, and Halo components, with
+        the suffixes _D, _TD, and _H, respectively.
+
+    """
+    # check input types
+    match (Z, R):
+        case (np.ndarray(), np.ndarray()) if Z.shape == R.shape:
+            pass  # both are arrays of the same shape
+        case (float() | int(), float() | int()):
+            pass  # both are scalars
+        case (float() | int(), np.ndarray()):
+            Z = np.full(R.shape, Z)  # make Z an array of same shape as R
+        case (np.ndarray(), float() | int()):
+            R = np.full(Z.shape, R)  # make R an array of same shape as Z
+        case _:
+            raise TypeError(
+                "Z and R must be either both arrays of the same shape or scalar."
+            )
+
+    # clip Z and R to the min and max values in the kinematics table.
+    Z = np.clip(
+        np.abs(Z),
+        a_min=KINEMATICS_TABLE["Z"].min(),
+        a_max=KINEMATICS_TABLE["Z"].max(),
+    )
+    R = np.clip(
+        R,
+        a_min=KINEMATICS_TABLE["R"].min(),
+        a_max=KINEMATICS_TABLE["R"].max(),
+    )
+
+    # find the correct bin in the kinematics table
+    kinematics_rows = []
+    for z, r in tqdm(
+        np.broadcast(Z, R),
+        total=len(Z),
+        desc=f"Retrieving Kinematic Parameter: ",
+        disable=not progress,
+    ):
+        matching_row = KINEMATICS_TABLE[
+            (KINEMATICS_TABLE["Z"] <= z) & (KINEMATICS_TABLE["R"] <= r)
+        ].iloc[-1]
+
+        kinematics_rows.append(matching_row)
+
+    kinematics_table = pd.DataFrame(kinematics_rows).reset_index(drop=True)
+    return kinematics_table
 
 
 def calculate_galactic_quantities(
@@ -72,14 +152,17 @@ def calculate_galactic_quantities(
         radec=True,
     )
 
-    return orbits.U(), orbits.V(), orbits.W(), orbits.R(), orbits.z()
+    return orbits.U(), orbits.V(), orbits.W(), orbits.z(), orbits.R()
 
 
 def component_probability(
     U: float | np.ndarray,
     V: float | np.ndarray,
     W: float | np.ndarray,
-    parameter: dict[str, float],
+    sigma_U: float | np.ndarray,
+    sigma_V: float | np.ndarray,
+    sigma_W: float | np.ndarray,
+    V_asym: float | np.ndarray,
     log: bool = False,
 ) -> float | np.ndarray:
     """
@@ -98,14 +181,14 @@ def component_probability(
     W : float | np.ndarray
         The Galactic velocity W (pointed towards the
         North Galactic Pole) in km/s.
-    parameter : dict[str, float]
-        A dictionary containing the parameters of the component.
-        The dict must contain:
-            - sigma_U: The velocity dispersion in U in km/s.
-            - sigma_V: The velocity dispersion in V in km/s.
-            - sigma_W: The velocity dispersion in W in km/s.
-            - V_asym: The mean velocity in V in km/s.
-
+    sigma_U : float | np.ndarray
+        The velocity dispersion in U in km/s.
+    sigma_V : float | np.ndarray
+        The velocity dispersion in V in km/s.
+    sigma_W : float | np.ndarray
+        The velocity dispersion in W in km/s.
+    V_asym : float | np.ndarray
+        The mean velocity in V in km/s.
     log : bool, optional
         If True, return the log of the probability instead,
         by default False
@@ -116,18 +199,15 @@ def component_probability(
         The probability of the star to belong to the component.
 
     """
-    for key in ["sigma_U", "sigma_V", "sigma_W", "V_asym"]:
-        if key not in parameter.keys():
-            raise ValueError(f"Parameter dict must contain {key!r}.")
     if log:
-        U_prob = norm.logpdf(U, loc=0, scale=parameter["sigma_U"])
-        V_prob = norm.logpdf(V, loc=parameter["V_asym"], scale=parameter["sigma_V"])
-        W_prob = norm.logpdf(W, loc=0, scale=parameter["sigma_W"])
+        U_prob = norm.logpdf(U, loc=0, scale=sigma_U)
+        V_prob = norm.logpdf(V, loc=V_asym, scale=sigma_V)
+        W_prob = norm.logpdf(W, loc=0, scale=sigma_W)
         return U_prob + V_prob + W_prob
 
-    U_prob = norm.pdf(U, loc=0, scale=parameter["sigma_U"])
-    V_prob = norm.pdf(V, loc=parameter["V_asym"], scale=parameter["sigma_V"])
-    W_prob = norm.pdf(W, loc=0, scale=parameter["sigma_W"])
+    U_prob = norm.pdf(U, loc=0, scale=sigma_U)
+    V_prob = norm.pdf(V, loc=V_asym, scale=sigma_V)
+    W_prob = norm.pdf(W, loc=0, scale=sigma_W)
     return U_prob * V_prob * W_prob
 
 
@@ -135,9 +215,9 @@ def relative_probability(
     U: float | np.ndarray,
     V: float | np.ndarray,
     W: float | np.ndarray,
-    component_1: str | dict[str, float],
-    component_2: str | dict[str, float],
-    component_dict: Optional[dict[str, dict[str, float]]] = None,
+    kinematic_parameter: pd.DataFrame,
+    component_1: str,
+    component_2: str,
 ) -> float | np.ndarray:
     """
     Calculate the relative probability of a star to belong to
@@ -153,9 +233,9 @@ def relative_probability(
     Classification based on Bensby et al. (2003) and Bensby et al. (2014).
 
     If component_dict is None, the default components are:
-    - thin disk: X=0.94, sigma_U=35, sigma_V=20, sigma_W=16, V_asym=-15
-    - thick disk: X=0.06, sigma_U=67, sigma_V=38, sigma_W=35, V_asym=-46
-    - halo: X=0.0015, sigma_U=160, sigma_V=90, sigma_W=90, V_asym=-220
+    - Thin Disk: X=0.94, sigma_U=35, sigma_V=20, sigma_W=16, V_asym=-15
+    - Thick Disk: X=0.06, sigma_U=67, sigma_V=38, sigma_W=35, V_asym=-46
+    - Halo: X=0.0015, sigma_U=160, sigma_V=90, sigma_W=90, V_asym=-220
 
     Parameters
     ----------
@@ -165,17 +245,23 @@ def relative_probability(
         The Galactic velocity V in km/s.
     W : float | np.ndarray
         The Galactic velocity W in km/s.
-    component_1 : str | dict[str, float]
-        The first component, either a string matching the keys in the
-        component_dict or a dictionary with the parameters.
-    component_2 : str | dict[str, float]
-        The first component, either a string matching the keys in the
-        component_dict or a dictionary with the parameters.
-    component_dict : Optional[dict[str, dict[str, float]]], optional
-        A dictionary containing the parameters of the components.
-        Must be of the form
-        {component: {X, sigma_U, sigma_V, sigma_W, V_asym}}.
-        By default None. If None, the default components are used.
+    kinematic_parameter : pd.DataFrame
+        The kinematic parameters of the Galactic components
+        at the given position (Z, R), given as a dataframe.
+        The dataframe should contain the following columns:
+            - sigma_U{component}: The velocity dispersion in U in km/s
+            - sigma_V{component}: The velocity dispersion in V in km/s
+            - sigma_W{component}: The velocity dispersion in W in km/s
+            - V_asym{component}: The mean velocity in V in km/s
+            - X{component}: The relative fraction of the component
+        for each component, where {component} is one of
+            - _D for the Thin Disk
+            - _TD for the Thick Disk
+            - _H for the Halo
+    component_1 : str
+        The first component, must be "Thin Disk", "Thick Disk", or "Halo".
+    component_2 : str
+        The second component, must be "Thin Disk", "Thick Disk", or "Halo".
 
     Returns
     -------
@@ -184,59 +270,36 @@ def relative_probability(
         with respect to component 2.
 
     """
-    if component_dict is None:
-        component_dict = {
-            "thin disk": {
-                "X": 0.94,
-                "sigma_U": 35,
-                "sigma_V": 20,
-                "sigma_W": 16,
-                "V_asym": -15,
-            },
-            "thick disk": {
-                "X": 0.06,
-                "sigma_U": 67,
-                "sigma_V": 38,
-                "sigma_W": 35,
-                "V_asym": -46,
-            },
-            "halo": {
-                "X": 0.0015,
-                "sigma_U": 160,
-                "sigma_V": 90,
-                "sigma_W": 90,
-                "V_asym": -220,
-            },
-        }
+    component_map = {
+        "thin disk": "_D",
+        "thick disk": "_TD",
+        "halo": "_H",
+    }
 
-    components = [component_1, component_2]
-    for i, component in enumerate(components):
-        if isinstance(component, str):
-            if component not in component_dict.keys():
-                raise ValueError(
-                    f"Component {component!r} not found in component_dict,"
-                    f"with keys {list(component_dict.keys())}."
-                )
-            else:
-                components[i] = component_dict[component]
-
-        elif isinstance(component, dict):
-            for key in ["X", "sigma_U", "sigma_V", "sigma_W", "V_asym"]:
-                if key not in component.keys():
-                    raise ValueError(
-                        f"Parameter dict {component!r} must contain {key!r}."
-                    )
-        else:
+    for component in [component_1, component_2]:
+        if component.lower() not in component_map.keys():
             raise ValueError(
-                "Component must be a string or a dictionary with the parameters."
+                f"Component {component!r} not found. Must be one of "
+                f"{list(component_map.keys())}."
             )
+    component_1 = component_map[component_1.lower()]
+    component_2 = component_map[component_2.lower()]
 
-    component_1, component_2 = components
-    assert isinstance(component_1, dict)
-    assert isinstance(component_2, dict)
-
-    prob_1 = np.asarray(component_probability(U, V, W, component_1))
-    prob_2 = np.asarray(component_probability(U, V, W, component_2))
+    probs = []
+    for comp in [component_1, component_2]:
+        prob = np.asarray(
+            component_probability(
+                U,
+                V,
+                W,
+                sigma_U=kinematic_parameter[f"sigma_U{comp}"].to_numpy(),
+                sigma_V=kinematic_parameter[f"sigma_V{comp}"].to_numpy(),
+                sigma_W=kinematic_parameter[f"sigma_W{comp}"].to_numpy(),
+                V_asym=kinematic_parameter[f"V_asym{comp}"].to_numpy(),
+            )
+        )
+        probs.append(prob)
+    prob_1, prob_2 = probs
 
     # calculate relative probabilities, deal with division by zero
     relative_probabilities = np.full_like(prob_1, np.nan, dtype=float)
@@ -244,8 +307,8 @@ def relative_probability(
     relative_probabilities[(prob_1 == 0.0) | (prob_2 > 0.0)] = 0
     relative_probabilities[(prob_1 > 0.0) & (prob_2 == 0.0)] = np.inf
     relative_probabilities[(prob_1 != 0.0) & (prob_2 != 0.0)] = (
-        component_1["X"]
-        / component_2["X"]
+        kinematic_parameter[f"X{component_1}"].to_numpy()
+        / kinematic_parameter[f"X{component_2}"].to_numpy()
         * prob_1[(prob_1 != 0.0) & (prob_2 != 0.0)]
         / prob_2[(prob_1 != 0.0) & (prob_2 != 0.0)]
     )
@@ -256,8 +319,8 @@ def classify_stars(
     dataframe: pd.DataFrame,
     lower_cut: float = 0.1,
     upper_cut: float = 10,
-    return_galactic_quantities: bool = False,
-    return_probabilities: bool = False,
+    include_galactic_quantities: bool = False,
+    include_probabilities: bool = False,
     overwrite: bool = False,
     raise_errors: bool = True,
 ) -> pd.DataFrame:
@@ -265,8 +328,8 @@ def classify_stars(
     Classify stars into different populations based on their Galactic
     velocities. A new column 'Population' is added to the dataframe,
     containing the classification. The classification is based on
-    the relative probabilities of the stars to belong to the thin disk,
-    thick disk, and halo components.
+    the relative probabilities of the stars to belong to the Thin Disk,
+    Thick Disk, and Halo components.
 
     The input dataframe should contain the following columns:
         - ra: Right ascension in degrees
@@ -284,14 +347,14 @@ def classify_stars(
         - Halo
 
     The classification is based on the relative probabilities
-    of the stars to belong to the thin disk, thick disk, and
-    halo components. Specifically, the the stars are classified
+    of the stars to belong to the Thin Disk, Thick Disk, and
+    Halo components. Specifically, the the stars are classified
     to a component if the relative probability is below a lower
     cut or above an upper cut. For in-between values, the stars
     are classified as candidates.
 
-    For halo stars and halo candidates, the stars are checked
-    if they are classified as thick disk beforehand. If so, an
+    For Halo stars and Halo candidates, the stars are checked
+    if they are classified as Thick Disk beforehand. If so, an
     error is raised. Deactivate this check by setting raise_errors
     to False.
 
@@ -301,23 +364,23 @@ def classify_stars(
         The input dataframe.
     lower_cut : float, optional
         The lower cut for the relative probability, if
-        e.g. the relative probabiltiy thick disk/thin
-        disk is below this value, the star is classified
-        as thin disk, by default 0.1.
+        e.g. the relative probabiltiy Thick Disk/Thin
+        Disk is below this value, the star is classified
+        as Thin Disk, by default 0.1.
     upper_cut : float, optional
         The upper cut for the relative probability, if
-        e.g. the relative probabiltiy thick disk/thin
-        disk is above this value, the star is classified
-        as thick disk, by default 10.
-    return_galactic_quantities : bool, optional
+        e.g. the relative probabiltiy Thick Disk/Thin
+        Disk is above this value, the star is classified
+        as Thick Disk, by default 10.
+    include_galactic_quantities : bool, optional
         If True, include the Galactic velocities U, V,
         and W, and the total non-circular velocity
         UW = sqrt(U^2 + W^2), as well as the Galactic
         coordinates R and Z in the output dataframe,
         by default False.
-    return_probabilities : bool, optional
+    include_probabilities : bool, optional
         If True, include the relative probabilities
-        thick disk/thin disk and thick disk/halo in the
+        Thick Disk/Thin Disk and Thick Disk/Halo in the
         output dataframe, by default False. If True, the
         columns names are 'TD/D' and 'TD/H'.
     overwrite : bool, optional
@@ -325,8 +388,8 @@ def classify_stars(
         already exists, by default False.
     raise_errors : bool, optional
         If True, raise errors if some stars are not classified
-        or if some halo stars or halo candidates are classified
-        as thick disk beforehand, by default True.
+        or if some Halo stars or Halo candidates are classified
+        as Thick Disk beforehand, by default True.
 
     Returns
     -------
@@ -340,8 +403,8 @@ def classify_stars(
         If the dataframe already contains a 'Population' column
         and overwrite is False.
     RuntimeError
-        If some some halo stars or halo candidates
-        are not classified as thick disk beforehand.
+        If some some Halo stars or Halo candidates
+        are not classified as Thick Disk beforehand.
     RuntimeError
         If some stars are not classified.
     """
@@ -355,14 +418,31 @@ def classify_stars(
     new_df = dataframe.copy()
 
     # calculate Galactic velocities
-    u, v, w, r, z = calculate_galactic_quantities(dataframe)
+    u, v, w, z, r = calculate_galactic_quantities(dataframe)
 
-    # calculate relative probabilities between thick disk and thin disk
-    td_d = relative_probability(u, v, w, "thick disk", "thin disk")
-    # calculate relative probabilities between thick disk and halo
-    h_td = relative_probability(u, v, w, "halo", "thick disk")
+    # get kinematic parameters
+    kinematic_parameter = get_kinematic_parameter(z, r)
 
-    if return_galactic_quantities:
+    # calculate relative probabilities between Thick Disk and Thin Disk
+    td_d = relative_probability(
+        u,
+        v,
+        w,
+        kinematic_parameter,
+        "Thick Disk",
+        "Thin Disk",
+    )
+    # calculate relative probabilities between Thick Disk and Halo
+    h_td = relative_probability(
+        u,
+        v,
+        w,
+        kinematic_parameter,
+        "Halo",
+        "Thick Disk",
+    )
+
+    if include_galactic_quantities:
         new_df["U"] = u
         new_df["V"] = v
         new_df["W"] = w
@@ -370,7 +450,7 @@ def classify_stars(
         new_df["R"] = r
         new_df["Z"] = z
 
-    if return_probabilities:
+    if include_probabilities:
         new_df["TD/D"] = td_d
         new_df["TD/H"] = np.where(h_td == 0, np.inf, 1 / h_td)
 
@@ -394,8 +474,8 @@ def classify_stars(
                 < set(new_df["Population"][mask].unique())
             ) and raise_errors:
                 raise RuntimeError(
-                    "Some halo stars or halo candidates are not classified "
-                    "as thick disk beforehand."
+                    "Some Halo stars or Halo candidates are not classified "
+                    "as Thick Disk beforehand."
                 )
         new_df.loc[mask, "Population"] = population
 
