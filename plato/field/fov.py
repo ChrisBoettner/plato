@@ -1,4 +1,3 @@
-import warnings
 from functools import partial
 from multiprocessing import Pool
 from typing import Any, Optional
@@ -87,17 +86,12 @@ def find_targets(
         )
         kwargs["rotationAngle"] = np.deg2rad(14.0)
 
-    elif isinstance == "LOPN1":
-        warnings.warn(
-            "LOPN1 is not fully confirmed. "
-            "Check updates on pointings before, "
-            "and confirm rotationAngle."
-        )
+    elif field == "LOPN1":
         kwargs["platformCoord"] = SkyCoord(
             "18:28:43.2 52:51:34",
             unit=(u.hourangle, u.deg),
         )
-        kwargs["rotationAngle"] = np.deg2rad(14.0)
+        kwargs["rotationAngle"] = np.deg2rad(-14.0)
 
     elif isinstance(field, dict):
         # check if field is a dictionary with SkyCoord and rotationAngle
@@ -114,6 +108,10 @@ def find_targets(
             "field must be 'LOPS2', 'LOPN1', or a dictionary "
             "with 'platformCoord' and 'rotationAngle' keys."
         )
+
+    print(f"Field Center: RA = {kwargs['platformCoord'].ra.deg:.3f} "  # type: ignore
+          f"Dec = {kwargs['platformCoord'].dec.deg:.3f} deg.")  # type: ignore
+    print(f"Rotation Angle: {np.rad2deg(kwargs["rotationAngle"]):.1f} deg.\n")
 
     try:
         data_coords = SkyCoord(ra=data["ra"], dec=data["dec"], unit="deg")

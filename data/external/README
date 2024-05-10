@@ -10,3 +10,9 @@ apogee.fits:
 xgboost.csv
 	Catalogue of Gaia metallicity, temperature, log_g estimates using machine-learning (DOI 10.5281/zenodo.7599788) from 
 	Andrae2023 (specifically using xgboost)
+	
+kinematic_characteristics.csv
+	Revised kinematic characteristics from Chen2021 (DOI 10.3847/1538-4357/abd5be). The ending of each component correspond to
+	D  : Thin Disk
+	TD : Thick Disk
+	H  : Halo

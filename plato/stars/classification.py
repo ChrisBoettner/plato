@@ -7,13 +7,25 @@ from astropy.coordinates import SkyCoord
 from galpy.orbit import Orbit
 from scipy.stats import norm
 
+KINEMATICS_TABLE = pd.read_csv(
+    "/home/chris/Documents/Projects/plato/data/external/kinematic_characteristics.csv"
+)
 
-def calculate_galactic_velocities(
+
+def calculate_galactic_quantities(
     dataframe: pd.DataFrame,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Calculate the Galactic velocities U, V, and W in the heliocentric frame
-    using galpy. The input dataframe should contain the following columns:
+    Calculate the Galactic velocities
+        - U: The heliocentric velocity in the direction of the Galactic center
+        - V: The heliocentric velocity in the direction of the Galactic rotation
+        - W: The heliocentric velocity in the direction of the North Galactic Pole
+    and the Galactic Coordinates
+        - R: The distance from the Galactic center in the Galactic plane
+        - Z: The distance from the Galactic plane
+    using galpy.
+
+    The input dataframe should contain the following columns:
         - ra: Right ascension in degrees
         - dec: Declination in degrees
         - parallax: Parallax in mas
@@ -29,9 +41,10 @@ def calculate_galactic_velocities(
 
     Returns
     -------
-    tuple[np.ndarray, np.ndarray, np.ndarray]
+    tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]
         A tuple containing the Galactic velocities
-        U, V, and W in the heliocentric frame in km/s.
+        U, V, and W in the heliocentric frame in km/s, and the
+        Galactic coordinates R and Z in kpc.
 
     """
     for key in ["ra", "dec", "parallax", "pmra", "pmdec", "radial_velocity"]:
@@ -59,7 +72,7 @@ def calculate_galactic_velocities(
         radec=True,
     )
 
-    return orbits.U(), orbits.V(), orbits.W()
+    return orbits.U(), orbits.V(), orbits.W(), orbits.R(), orbits.z()
 
 
 def component_probability(
@@ -77,11 +90,14 @@ def component_probability(
     Parameters
     ----------
     U : float | np.ndarray
-        The Galactic velocity U in km/s.
+        The Galactic velocity U (pointed towards the galactic center)
+        in km/.
     V : float | np.ndarray
-        The Galactic velocity V in km/s.
+        The Galactic velocity V (pointed in the direction of
+        the galactic rotation) in km/s.
     W : float | np.ndarray
-        The Galactic velocity W in km/s.
+        The Galactic velocity W (pointed towards the
+        North Galactic Pole) in km/s.
     parameter : dict[str, float]
         A dictionary containing the parameters of the component.
         The dict must contain:
@@ -240,7 +256,8 @@ def classify_stars(
     dataframe: pd.DataFrame,
     lower_cut: float = 0.1,
     upper_cut: float = 10,
-    include_probabilities: bool = False,
+    return_galactic_quantities: bool = False,
+    return_probabilities: bool = False,
     overwrite: bool = False,
     raise_errors: bool = True,
 ) -> pd.DataFrame:
@@ -292,7 +309,13 @@ def classify_stars(
         e.g. the relative probabiltiy thick disk/thin
         disk is above this value, the star is classified
         as thick disk, by default 10.
-    include_probabilities : bool, optional
+    return_galactic_quantities : bool, optional
+        If True, include the Galactic velocities U, V,
+        and W, and the total non-circular velocity
+        UW = sqrt(U^2 + W^2), as well as the Galactic
+        coordinates R and Z in the output dataframe,
+        by default False.
+    return_probabilities : bool, optional
         If True, include the relative probabilities
         thick disk/thin disk and thick disk/halo in the
         output dataframe, by default False. If True, the
@@ -332,14 +355,22 @@ def classify_stars(
     new_df = dataframe.copy()
 
     # calculate Galactic velocities
-    u, v, w = calculate_galactic_velocities(dataframe)
+    u, v, w, r, z = calculate_galactic_quantities(dataframe)
 
     # calculate relative probabilities between thick disk and thin disk
     td_d = relative_probability(u, v, w, "thick disk", "thin disk")
     # calculate relative probabilities between thick disk and halo
     h_td = relative_probability(u, v, w, "halo", "thick disk")
 
-    if include_probabilities:
+    if return_galactic_quantities:
+        new_df["U"] = u
+        new_df["V"] = v
+        new_df["W"] = w
+        new_df["UW"] = np.sqrt(u**2 + w**2)
+        new_df["R"] = r
+        new_df["Z"] = z
+
+    if return_probabilities:
         new_df["TD/D"] = td_d
         new_df["TD/H"] = np.where(h_td == 0, np.inf, 1 / h_td)
 
