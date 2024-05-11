@@ -16,14 +16,15 @@ def set_plot_defaults() -> None:
         context="paper",
         style="whitegrid",
         palette="pastel",
-        font_scale=5,
+        font_scale=4.5,
         rc={
             "figure.figsize": (18.5, 10.5),
-            "axes.grid": False,
+            "axes.grid": True,
             "font.family": "serif",
             "font.serif": ["Computer Modern Roman"],
             "text.usetex": True,
             "text.latex.preamble": r"\usepackage[varg]{txfonts}",
+            "axes.linewidth": 3,
         },
     )
 
@@ -107,7 +108,13 @@ def get_palette(
         return diverging_palette
 
 
-def adjust_legend(ax: Axes, ncols: int = 3, pad: float = 1, **kwargs: Any) -> Axes:
+def adjust_legend(
+    ax: Axes,
+    ncols: int = 3,
+    pad: float = 1,
+    common_markersize: Optional[int] = None,
+    **kwargs: Any,
+) -> Axes:
     """
     Adjust plot to accomodate for legend. Can increase the number of columns for the
     legend, and add extra space at top of legend for legend.
@@ -121,6 +128,9 @@ def adjust_legend(ax: Axes, ncols: int = 3, pad: float = 1, **kwargs: Any) -> Ax
     pad : float, optional
         Additional padding at top of plot (multiple of ymax). The default is 1,
         i.e. no change.
+    common_markersize : Optional[int], optional
+        If not None, set all markers in legend to this size.
+        The default is None.
     kwargs : Any
         Additional parameter passed to ax.legend()
 
@@ -133,7 +143,12 @@ def adjust_legend(ax: Axes, ncols: int = 3, pad: float = 1, **kwargs: Any) -> Ax
 
     ymin, ymax = ax.get_ylim()
     ax.set_ylim(ymin, ymax * pad)
-    ax.legend(ncols=ncols, **kwargs)
+    legend = ax.legend(ncols=ncols, **kwargs)
+
+    if common_markersize is not None:
+        for handle in legend.legendHandles:
+            assert hasattr(handle, "set_sizes")
+            handle.set_sizes([common_markersize])  # type: ignore
     return ax
 
 
