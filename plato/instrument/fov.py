@@ -10,7 +10,7 @@ from pandas import DataFrame as pdDataFrame
 from polars import DataFrame as plDataFrame
 from tqdm import tqdm
 
-from plato.field.platopoint import platopoint  # type: ignore
+from plato.instrument.platopoint import platopoint  # type: ignore
 
 
 def count_cameras(source: SkyCoord, **kwargs: Any) -> int:
@@ -72,9 +72,9 @@ def find_targets(
         DataFrame with 'num_CCDs' column added. Zero corresponds to target
         being outside the Plato field of view.
     """
-
     if not isinstance(data, (pdDataFrame, plDataFrame)):
         raise ValueError("data must be a (pandas or polars) DataFrame.")
+    data = data.copy()  # type: ignore
 
     if kwargs is None:
         kwargs = {}

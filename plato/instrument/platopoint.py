@@ -1931,6 +1931,8 @@ def platopoint(
     azimuthAngles = np.deg2rad([45.0, 135.0, 225.0, 315.0])
     tiltAngles = np.deg2rad([9.2, 9.2, 9.2, 9.2])
     solarPanelOrientation = np.pi * (Quarter - 1) / 2 + rotationAngle
+    radius = 4878.5346  # radius of Telescope Optical Unit (TOU) in pixels
+    offset = 0  # 66.6666  # offset of CCD corner from center of TOU in pixels
 
     # Make sure that for the respective field distortion the proper information is given.
 
@@ -1959,7 +1961,6 @@ def platopoint(
 
     # Using Camera ID to set list:
     Cameras = [1, 2, 3, 4] if nCamera is None else [nCamera]
-
     # Compute the (x,y) coordinates in the FP reference system [mm]
     xFPmms = {}
     yFPmms = {}
@@ -1978,6 +1979,7 @@ def platopoint(
             focalPlaneAngle,
             focalLength,
         )
+
         if targetCoord.separation(platformCoord) < 30 * u.deg:
             # Only doing any calculations for stars close to the mid-platoform pointing:
             if (includeFieldDistortion == True) or (includeFieldDistortion == "yes"):
@@ -2023,11 +2025,17 @@ def platopoint(
                 Nrows = CCD[ccdCode]["Nrows"]
                 Ncols = CCD[ccdCode]["Ncols"]
                 firstRow = CCD[ccdCode]["firstRow"]
+
+                # Calculate the distance from the center of the TOU, if larger than the radius, skip
+
+                r = np.sqrt((xCCDpix - offset) ** 2 + (Nrows - yCCDpix - offset) ** 2)
+
                 if (
                     (xCCDpix >= 0)
                     and (yCCDpix >= firstRow)
                     and (xCCDpix < Ncols)
                     and (yCCDpix < Nrows)
+                    and (r < radius)
                 ):
                     CCDcodes[cam] = ccdCode
                     xCCDpixs[cam] = xCCDpix
