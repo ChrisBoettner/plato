@@ -1931,8 +1931,8 @@ def platopoint(
     azimuthAngles = np.deg2rad([45.0, 135.0, 225.0, 315.0])
     tiltAngles = np.deg2rad([9.2, 9.2, 9.2, 9.2])
     solarPanelOrientation = np.pi * (Quarter - 1) / 2 + rotationAngle
-    radius = 4878.5346  # radius of Telescope Optical Unit (TOU) in pixels
-    offset = 0  # 66.6666  # offset of CCD corner from center of TOU in pixels
+    radius_tou = 4878.5346  # radius of Telescope Optical Unit (TOU) in pixels
+    offset_tou = 0  # 66.6666  # offset of CCD corner from center of TOU in pixels
 
     # Make sure that for the respective field distortion the proper information is given.
 
@@ -2028,14 +2028,14 @@ def platopoint(
 
                 # Calculate the distance from the center of the TOU, if larger than the radius, skip
 
-                r = np.sqrt((xCCDpix - offset) ** 2 + (Nrows - yCCDpix - offset) ** 2)
+                r = np.sqrt((xCCDpix - offset_tou) ** 2 + (Nrows - yCCDpix - offset_tou) ** 2)
 
                 if (
                     (xCCDpix >= 0)
                     and (yCCDpix >= firstRow)
                     and (xCCDpix < Ncols)
                     and (yCCDpix < Nrows)
-                    and (r < radius)
+                    and (r < radius_tou)
                 ):
                     CCDcodes[cam] = ccdCode
                     xCCDpixs[cam] = xCCDpix
