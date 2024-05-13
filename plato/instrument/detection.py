@@ -17,24 +17,24 @@ class NoiseModel:
         n_photoelectrons_ref: int = 177100,
         n_photoelectrons_brightest_pixel_ref: int = 47400,
         n_images: int = 144,
-        n_mask: float = 9.5,
-        ccd_readout_noise_factor: float = 44.3,
-        fee_readout_noise_factor: float = 37.0,
-        asd_jitter: float = 0.54e-6,
+        n_mask: float | np.ndarray = 9.5,
+        ccd_readout_noise_factor: float | np.ndarray = 44.3,
+        fee_readout_noise_factor: float | np.ndarray = 37.0,
+        asd_jitter: float | np.ndarray = 0.54e-6,
         observation_frequency: int = 278,
-        signal_spread_factor: float = 0.27,
-        background_rate: float = 60,
-        stray_light_rate: float = 64,
-        contaminating_star_rate: float = 0.01,
+        signal_spread_factor: float | np.ndarray = 0.27,
+        background_rate: float | np.ndarray = 60,
+        stray_light_rate: float | np.ndarray = 64,
+        contaminating_star_rate: float | np.ndarray = 0.01,
         exposure_time: int = 21,
-        smearing_rate: float = 45,
-        charge_transfer_time: float = 4,
-        psf_breathing_noise_factor: float = 20e-6,
-        fee_offset_sensitivity: float = 1,
-        adc_gain: float = 25,
-        fee_temp_stability: float = 1.0,
-        fee_temp_knowledge: float = 0.01,
-        fee_offset_converstion: float = 0.66,
+        smearing_rate: float | np.ndarray = 45,
+        charge_transfer_time: float | np.ndarray = 4,
+        psf_breathing_noise_factor: float | np.ndarray = 20e-6,
+        fee_offset_sensitivity: float | np.ndarray = 1,
+        adc_gain: float | np.ndarray = 25,
+        fee_temp_stability: float | np.ndarray = 1.0,
+        fee_temp_knowledge: float | np.ndarray = 0.01,
+        fee_offset_converstion: float | np.ndarray = 0.66,
     ) -> None:
         """
         Initializes the noise model with reference parameters.
@@ -51,49 +51,49 @@ class NoiseModel:
             Number of images taken within 1 hour,
             by default 144 (cadence of 25s, with 21s
             exposure time and 4s signal transfer time).
-        n_mask : float, optional
+        n_mask : float | np.ndarray, optional
             Effective number of pixels in the mask,
             by default 9.5.
-        ccd_readout_noise_factor : float, optional
+        ccd_readout_noise_factor : float | np.ndarray, optional
             CCD readout noise factor, by default 44.3.
-        fee_readout_noise_factor : float, optional
+        fee_readout_noise_factor : float | np.ndarray, optional
             FEE readout noise factor, by default 37.0.
-        asd_jitter : float, optional
+        asd_jitter : float | np.ndarray, optional
             ASD (amplitude spectral density) jitter factor, by default 0.54e-6.
         observation_frequency : int, optional
             Observation frequency in microHz, by default 278.
-        signal_spread_factor : float, optional
+        signal_spread_factor : float | np.ndarray, optional
             Fraction of energy in the brightest pixel,
             by defaults 0.27.
-        background_rate : float, optional
+        background_rate : float | np.ndarray, optional
             Background photoelectron rate per pixel per second,
             by default 60.
-        stray_light_rate : float, optional
+        stray_light_rate : float | np.ndarray, optional
             Stray light photoelectron rate per pixel per second,
             by default 64.
-        contaminating_star_rate : float, optional
+        contaminating_star_rate : float | np.ndarray, optional
             Contaminating star signal as a fraction of target star signal,
             by default 0.01.
         exposure_time : int, optional
             Exposure time in seconds, by default 21.
-        smearing_rate : float, optional
+        smearing_rate : float | np.ndarray, optional
             Median photoelectron rate for smearing noise,
             by default 45.
-        charge_transfer_time : float, optional
+        charge_transfer_time : float | np.ndarray, optional
             Charge transfer time in seconds, by default 4.
-        psf_breathing_noise_factor : float, optional
+        psf_breathing_noise_factor : float | np.ndarray, optional
             PSF breathing noise factor in ppm on camera level,
             by default 20e-6.
-        fee_offset_sensitivity : float, optional
+        fee_offset_sensitivity : float | np.ndarray, optional
             FEE offset sensitivity to temperature in ADU/K,
             by default 1.
-        adc_gain : float, optional
+        adc_gain : float | np.ndarray, optional
             ADC gain factor, by default 25.
-        fee_temp_stability : float, optional
+        fee_temp_stability : float | np.ndarray, optional
             FEE temperature stability in K, by default 1.0.
-        fee_temp_knowledge : float, optional
+        fee_temp_knowledge : float | np.ndarray, optional
             FEE temperature knowledge in K, by default 0.01.
-        fee_offset_converstion : float, optional
+        fee_offset_converstion : float | np.ndarray, optional
             FEE offset conversion factor, by default 0.66.
         """
         self.n_photoelectrons_ref = n_photoelectrons_ref
@@ -118,72 +118,96 @@ class NoiseModel:
         self.fee_temp_knowledge = fee_temp_knowledge
         self.fee_offset_converstion = fee_offset_converstion
 
-    def calculate_flux(self, magnitude_v: float) -> float:
+    def calculate_flux(
+        self,
+        magnitude_v: float | np.ndarray,
+        a: float | np.ndarray = -0.02393861,
+        b: float | np.ndarray = 1.06645729,
+    ) -> float | np.ndarray:
         """
         Calculates the flux of a star given its magnitude.
+        The fluxes are calculated using the following formula:
+        flux = 10^(a - 0.4 * b * (magnitude_v - 11)),
+        where a and b are correction factors so that the flux
+        is the same as as the ones given in Boerner+2022 (
+        calculated from the values of the photon noise
+        given in table 5-2 and the equation 3-13)
 
         Parameters
         ----------
-        magnitude_v : float
+        magnitude_v : float | np.ndarray
             The apparent V magnitude of the star.
+        a : float | np.ndarray, optional
+            Normalisation correction factor,
+            by default -0.02393861.
+        b : float | np.ndarray, optional
+            Slope correction factor, by
+            default 1.06645729.
 
         Returns
         -------
-        float
+        float | np.ndarray
             The flux of the star.
         """
-        return 10 ** (-0.4 * (magnitude_v - 11))
+        log_flux = a - 0.4 * b * (magnitude_v - 11)
+        return np.power(10, log_flux)
 
-    def calculate_n_photoelectrons(self, magnitude_v: float) -> float:
+    def calculate_n_photoelectrons(
+        self, magnitude_v: float | np.ndarray
+    ) -> float | np.ndarray:
         """
         Calculates the number of photoelectrons in the entire mask, based
         on the V band magnitude of the star. (Very approximate, WIP)
 
         Parameters
         ----------
-        magnitude_v : float
+        magnitude_v : float | np.ndarray
             The apparent V magnitude of the star.
 
         Returns
         -------
-        float
+        float | np.ndarray
             The number of photoelectrons in the entire mask.
         """
         return self.calculate_flux(magnitude_v) * self.n_photoelectrons_ref
 
-    def calculate_n_photoelectrons_brightest_pixel(self, magnitude_v: float) -> float:
+    def calculate_n_photoelectrons_brightest_pixel(
+        self, magnitude_v: float | np.ndarray
+    ) -> float | np.ndarray:
         """
         Calculates the number of photoelectrons in the brightest pixel, based
         on the V band magnitude of the star. (Very approximate, WIP)
 
         Parameters
         ----------
-        magnitude_v : float
+        magnitude_v : float | np.ndarray
             The apparent V magnitude of the star.
 
         Returns
         -------
-        float
+        float | np.ndarray
             The number of photoelectrons in the brightest pixel.
         """
         return (
             self.calculate_flux(magnitude_v) * self.n_photoelectrons_brightest_pixel_ref
         )
 
-    def ccd_readout_noise(self, magnitude_v: float, n_cameras: int) -> float:
+    def ccd_readout_noise(
+        self, magnitude_v: float | np.ndarray, n_cameras: int
+    ) -> float | np.ndarray:
         """
         Calculates the CCD readout noise for a star given its magnitude.
 
         Parameters
         ----------
-        magnitude_v : float
+        magnitude_v : float | np.ndarray
             The apparent V magnitude of the star.
         n_cameras : int
             The number of cameras observing the star.
 
         Returns
         -------
-        float
+        float | np.ndarray
             The CCD readout noise.
         """
         return (
@@ -192,20 +216,22 @@ class NoiseModel:
             * np.sqrt(self.n_mask / n_cameras / self.n_images)
         )
 
-    def fee_readout_noise(self, magnitude_v: float, n_cameras: int) -> float:
+    def fee_readout_noise(
+        self, magnitude_v: float | np.ndarray, n_cameras: int
+    ) -> float | np.ndarray:
         """
         Calculates the FEE readout noise for a star given its magnitude.
 
         Parameters
         ----------
-        magnitude_v : float
+        magnitude_v : float | np.ndarray
             The apparent V magnitude of the star.
         n_cameras : int
             The number of cameras observing the star.
 
         Returns
         -------
-        float
+        float | np.ndarray
             The FEE readout noise.
         """
         return (
@@ -214,32 +240,34 @@ class NoiseModel:
             * np.sqrt(self.n_mask / n_cameras / self.n_images)
         )
 
-    def jitter_noise(self) -> float:
+    def jitter_noise(self) -> float | np.ndarray:
         """
         Calculates the jitter noise.
 
         Returns
         -------
-        float
+        float | np.ndarray
             The jitter noise.
         """
         return self.asd_jitter * np.sqrt(self.observation_frequency)
 
-    def misc_photon_noise(self, magnitude_v: float, n_cameras: int) -> float:
+    def misc_photon_noise(
+        self, magnitude_v: float | np.ndarray, n_cameras: int
+    ) -> float | np.ndarray:
         """
         Calculates the miscellaneous photon noise, consistent of
         background noise, stray light noise, and contaminating star noise.
 
         Parameters
         ----------
-        magnitude_v : float
+        magnitude_v : float | np.ndarray
             The apparent V magnitude of the star.
         n_cameras : int
             The number of cameras observing the star.
 
         Returns
         -------
-        float
+        float | np.ndarray
             The miscellaneous photon noise.
         """
         background_noise = self.background_rate * self.exposure_time
@@ -255,20 +283,22 @@ class NoiseModel:
             * np.sqrt(self.n_mask / n_cameras / self.n_images)
         )
 
-    def ccd_smearing_noise(self, magnitude_v: float, n_cameras: int) -> float:
+    def ccd_smearing_noise(
+        self, magnitude_v: float | np.ndarray, n_cameras: int
+    ) -> float | np.ndarray:
         """
         Calculates the CCD smearing noise.
 
         Parameters
         ----------
-        magnitude_v : float
+        magnitude_v : float | np.ndarray
             The apparent V magnitude of the star.
         n_cameras : int
             The number of cameras observing the star.
 
         Returns
         -------
-        float
+        float | np.ndarray
             The CCD smearing noise.
         """
         return (
@@ -278,7 +308,7 @@ class NoiseModel:
             * np.sqrt(self.n_mask / n_cameras / self.n_images)
         )
 
-    def psf_breathing_noise(self, n_cameras: int) -> float:
+    def psf_breathing_noise(self, n_cameras: int) -> float | np.ndarray:
         """
         Calculates the PSF breathing noise.
 
@@ -289,25 +319,27 @@ class NoiseModel:
 
         Returns
         -------
-        float
+        float | np.ndarray
             The PSF breathing noise.
         """
         return self.psf_breathing_noise_factor / np.sqrt(n_cameras * self.n_images)
 
-    def fee_offset_stability_noise(self, magnitude_v: float, n_cameras: int) -> float:
+    def fee_offset_stability_noise(
+        self, magnitude_v: float | np.ndarray, n_cameras: int
+    ) -> float | np.ndarray:
         """
         Calculates the FEE offset stability noise.
 
         Parameters
         ----------
-        magnitude_v : float
+        magnitude_v : float | np.ndarray
             The apparent V magnitude of the star.
         n_cameras : int
             The number of cameras observing the star.
 
         Returns
         -------
-        float
+        float | np.ndarray
             The FEE offset stability noise.
         """
         return (
@@ -320,27 +352,31 @@ class NoiseModel:
             / np.sqrt(n_cameras * self.n_images)
         )
 
-    def photon_noise(self, magnitude_v: float, n_cameras: int) -> float:
+    def photon_noise(
+        self, magnitude_v: float | np.ndarray, n_cameras: int
+    ) -> float | np.ndarray:
         """
         Calculates the photon noise.
 
         Parameters
         ----------
-        magnitude_v : float
+        magnitude_v : float | np.ndarray
             The apparent V magnitude of the star.
         n_cameras : int
             The number of cameras observing the star.
 
         Returns
         -------
-        float
+        float | np.ndarray
             The photon noise.
         """
         return 1 / np.sqrt(
             self.calculate_n_photoelectrons(magnitude_v) * n_cameras * self.n_images
         )
 
-    def random_noise(self, magnitude_v: float, n_cameras: int) -> float:
+    def random_noise(
+        self, magnitude_v: float | np.ndarray, n_cameras: int
+    ) -> float | np.ndarray:
         """
         Calculates the random noise, which is the (Pythagorean) sum of the CCD readout
         noise, FEE readout noise, miscellaneous photon noise, and CCD
@@ -348,14 +384,14 @@ class NoiseModel:
 
         Parameters
         ----------
-        magnitude_v : float
+        magnitude_v : float | np.ndarray
             The apparent V magnitude of the star.
         n_cameras : int
             The number of cameras observing the star.
 
         Returns
         -------
-        float
+        float | np.ndarray
             The random noise.
         """
         return np.sqrt(
@@ -365,21 +401,23 @@ class NoiseModel:
             + self.ccd_smearing_noise(magnitude_v, n_cameras) ** 2
         )
 
-    def systematic_noise(self, magnitude_v: float, n_cameras: int) -> float:
+    def systematic_noise(
+        self, magnitude_v: float | np.ndarray, n_cameras: int
+    ) -> float | np.ndarray:
         """
         Calculates the systematic noise, which is the (Pythagorean) sum of the jitter
         noise, PSF breathing noise, and FEE offset stability noise.
 
         Parameters
         ----------
-        magnitude_v : float
+        magnitude_v : float | np.ndarray
             The apparent V magnitude of the star.
         n_cameras : int
             The number of cameras observing the star.
 
         Returns
         -------
-        float
+        float | np.ndarray
             The systematic noise.
         """
         return np.sqrt(
@@ -390,10 +428,10 @@ class NoiseModel:
 
     def calculate_NSR(
         self,
-        magnitude_v: float,
+        magnitude_v: float | np.ndarray,
         n_cameras: int,
-        stellar_variability: float = 10e-6,
-    ) -> float:
+        stellar_variability: float | np.ndarray = 10e-6,
+    ) -> float | np.ndarray:
         """
         Calculate the noise-to-signal ratio.
         The NSR consists of photometric precision, with consits of
@@ -410,14 +448,14 @@ class NoiseModel:
 
         Parameters
         ----------
-        magnitude_v : float
+        magnitude_v : float | np.ndarray
             The apparent V magnitude of the star.
         n_cameras : int
             The number of cameras observing the star.
 
         Returns
         -------
-        float
+        float | np.ndarray
             The noise-to-signal ratio.
         """
 
@@ -512,7 +550,7 @@ class DetectionModel:
         self,
         t_mission: u.year,
         porb: u.day,
-    ) -> float:
+    ) -> float | np.ndarray:
         """
         Calculates the probability
         of having N+1 transits during the mission.
@@ -526,7 +564,7 @@ class DetectionModel:
 
         Returns
         -------
-        float
+        float | np.ndarray
             The probability
             of having N+1 transits.
 
@@ -542,7 +580,7 @@ class DetectionModel:
         t_mission: u.year,
         porb: u.day,
         return_average: bool = False,
-    ) -> float:
+    ) -> float | np.ndarray:
         """
         Estimates the average number of transits during the mission,
         accounting for the timing of the first transit.
@@ -564,7 +602,7 @@ class DetectionModel:
             If True, returns the average number of transits.
         Returns
         -------
-        float
+        float | np.ndarray
             The estimated number of transits.
         """
 
@@ -584,12 +622,12 @@ class DetectionModel:
         r_star: u.Rsun,
         porb: u.day,
         m_star: u.Msun,
-        magnitude_v: float,
+        magnitude_v: float | np.ndarray,
         n_cameras: int,
         t_mission: u.year = 2 * u.year,
-        stellar_variability: float = 10e-6,
+        stellar_variability: float | np.ndarray = 10e-6,
         extra_transit: bool = False,
-    ) -> float:
+    ) -> float | np.ndarray:
         """
         Calculates the signal-to-noise ratio (SNR) for a
         transiting exoplanet.
@@ -604,13 +642,13 @@ class DetectionModel:
             The orbital period of the planet.
         m_star : u.Msun
             The mass of the host star.
-        magnitude : float
+        magnitude : float | np.ndarray
             The apparent magnitude of the star.
         n_cameras : int
             The number of cameras observing the star.
         t_mission : u.year
             The duration of the mission, by default 2 years.
-        stellar_variability : float
+        stellar_variability : float | np.ndarray
             The standard deviation of the variability of the star
             on timescales of ~1hr, assumed to be white noise, by default 10e-6.
         extra_transit : bool
@@ -622,7 +660,7 @@ class DetectionModel:
 
         Returns
         -------
-        float
+        float | np.ndarray
             The signal-to-noise ratio (SNR).
         """
         a = self.calculate_semi_major_axis(porb, m_star)
@@ -662,10 +700,10 @@ class DetectionModel:
 
     @staticmethod
     def linear_detection_efficiency(
-        snr: float | np.ndarray,
-        lower_threshold: float = 6,
-        upper_threshold: float = 10,
-    ) -> float | np.ndarray:
+        snr: float | np.ndarray | np.ndarray,
+        lower_threshold: float | np.ndarray = 6,
+        upper_threshold: float | np.ndarray = 10,
+    ) -> float | np.ndarray | np.ndarray:
         """
         Calculates the detection efficiency as a function
         of the signal-to-noise ratio (SNR) using a linear model.
@@ -675,12 +713,12 @@ class DetectionModel:
 
         Parameters
         ----------
-        snr : float
+        snr : float | np.ndarray
             The signal-to-noise ratio.
-        lower_threshold : float, optional
+        lower_threshold : float | np.ndarray, optional
             The lower threshold below which the detection
             efficiency is 0, by default 6 (Fressin+2013).
-        upper_threshold : float, optional
+        upper_threshold : float | np.ndarray, optional
             The upper threshold above which the detection
             efficiency is 1, by default 10 (taken from the
             Plato Red book, which assumes a 100% efficiency
@@ -688,7 +726,7 @@ class DetectionModel:
 
         Returns
         -------
-        float
+        float | np.ndarray
             The detection efficiency as a function of the SNR.
         """
         if snr < lower_threshold:
@@ -700,11 +738,11 @@ class DetectionModel:
 
     @staticmethod
     def gamma_detection_efficiency(
-        snr: float | np.ndarray,
-        gamma_a: float = 30.87,
-        gamma_b: float = 0.271,
-        gamma_c: float = 0.940,
-    ) -> float | np.ndarray:
+        snr: float | np.ndarray | np.ndarray,
+        gamma_a: float | np.ndarray = 30.87,
+        gamma_b: float | np.ndarray = 0.271,
+        gamma_c: float | np.ndarray = 0.940,
+    ) -> float | np.ndarray | np.ndarray:
         """
         Calculates the detection efficiency as a function
         of the signal-to-noise ratio (SNR) using a gamma distribution model.
@@ -713,22 +751,22 @@ class DetectionModel:
 
         Parameters
         ----------
-        snr : float | np.ndarray
+        snr : float | np.ndarray | np.ndarray
             The signal-to-noise ratio.
-        gamma_a : float, optional
+        gamma_a : float | np.ndarray, optional
             The shape parameter of the gamma distribution,
             by default 30.87 (Christiansen+2017).
-        gamma_b : float, optional
+        gamma_b : float | np.ndarray, optional
             The scale parameter of the
             gamma distribution, by default 0.271 (Christiansen+2017).
-        gamma_c : float, optional
+        gamma_c : float | np.ndarray, optional
             The overall normalisation parameter of the
             gamma distribution, by default 0.940 (Christiansen+2017).
 
 
         Returns
         -------
-        float | np.ndarray
+        float | np.ndarray | np.ndarray
             The detection efficiency as a function of the SNR.
         """
         return gamma_c * gamma.cdf(snr, a=gamma_a, loc=0, scale=gamma_b)
@@ -739,15 +777,15 @@ class DetectionModel:
         r_star: u.Rsun,
         porb: u.day,
         m_star: u.Msun,
-        magnitude_v: float,
+        magnitude_v: float | np.ndarray,
         n_cameras: int,
         *,
         t_mission: u.year = 2 * u.year,
-        stellar_variability: float = 10e-6,
+        stellar_variability: float | np.ndarray = 10e-6,
         min_transits: int = 2,
         mode: str = "gamma",
         kwargs_detection_efficiency: Optional[dict] = None,
-    ) -> float | np.ndarray:
+    ) -> float | np.ndarray | np.ndarray:
         """
         Calculates the detection efficiency as a function
         of the signal-to-noise ratio (SNR). Two models are
@@ -776,13 +814,13 @@ class DetectionModel:
             The orbital period of the planet.
         m_star : u.Msun
             The mass of the host star.
-        magnitude : float
+        magnitude : float | np.ndarray
             The apparent magnitude of the star.
         n_cameras : int
             The number of cameras observing the star.
         t_mission : u.year
             The duration of the mission, by default 2 years.
-        stellar_variability : float
+        stellar_variability : float | np.ndarray
             The standard deviation of the variability of the star
             on timescales of ~1hr, assumed to be white noise, by default 10e-6.
         min_transits : int, optional
@@ -794,7 +832,7 @@ class DetectionModel:
             "linear" or "gamma", by default "linear".
         Returns
         -------
-        float | np.ndarray
+        float | np.ndarray | np.ndarray
             The detection efficiency as a function of the SNR.
 
         Raises

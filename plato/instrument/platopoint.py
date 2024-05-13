@@ -1868,7 +1868,7 @@ def platopoint(
     Quarter=1,
     platformCoord=SkyCoord("06:21:14.5 -47:53:13", unit=(u.hourangle, u.deg)),
     focalPlaneAngle=0.0,
-    focalLength=227,
+    focalLength=257.58142350248204,
     pixelSize=18,
     includeFieldDistortion=False,
     normal=True,
@@ -1876,6 +1876,7 @@ def platopoint(
     distortionCoefficients=None,
     pathToPsfFile=None,
     rotationAngle=0.0,
+    radius_tou=4746.759800993743,
 ):
     """Get the CCD and pixel coordinates.
 
@@ -1915,6 +1916,9 @@ def platopoint(
         Path to the PSF file (HDF5) for mapped PSFs to calculate mapped distortion
     rotatationAngle: float
         Angle by which to rotate the entire FoV. Added later and still WIP. [rad]
+    radius_tou: float
+        Radius of the Telescope Optical Unit (TOU) in pixels, still WIP. Used
+        to determine if the star is on the CCD or not. [pix]
 
     Return
     ------
@@ -1931,8 +1935,6 @@ def platopoint(
     azimuthAngles = np.deg2rad([45.0, 135.0, 225.0, 315.0])
     tiltAngles = np.deg2rad([9.2, 9.2, 9.2, 9.2])
     solarPanelOrientation = np.pi * (Quarter - 1) / 2 + rotationAngle
-    radius_tou = 4878.5346  # radius of Telescope Optical Unit (TOU) in pixels
-    offset_tou = 0  # 66.6666  # offset of CCD corner from center of TOU in pixels
 
     # Make sure that for the respective field distortion the proper information is given.
 
@@ -1967,21 +1969,21 @@ def platopoint(
     CCDcodes = {cam: None for cam in Cameras}
     xCCDpixs = {cam: None for cam in Cameras}
     yCCDpixs = {cam: None for cam in Cameras}
-    for cam in Cameras:
-        xFPmms[cam], yFPmms[cam] = skyToFocalPlaneCoordinates(
-            targetCoord.ra.rad,
-            targetCoord.dec.rad,
-            platformCoord.ra.rad,
-            platformCoord.dec.rad,
-            solarPanelOrientation,
-            tiltAngles[cam - 1],
-            azimuthAngles[cam - 1],
-            focalPlaneAngle,
-            focalLength,
-        )
+    if targetCoord.separation(platformCoord) < 30 * u.deg:
+    # Only doing any calculations for stars close to the mid-platoform pointing:
+        for cam in Cameras:
+            xFPmms[cam], yFPmms[cam] = skyToFocalPlaneCoordinates(
+                targetCoord.ra.rad,
+                targetCoord.dec.rad,
+                platformCoord.ra.rad,
+                platformCoord.dec.rad,
+                solarPanelOrientation,
+                tiltAngles[cam - 1],
+                azimuthAngles[cam - 1],
+                focalPlaneAngle,
+                focalLength,
+            )
 
-        if targetCoord.separation(platformCoord) < 30 * u.deg:
-            # Only doing any calculations for stars close to the mid-platoform pointing:
             if (includeFieldDistortion == True) or (includeFieldDistortion == "yes"):
                 if mappedDistortion:
                     xFPmms[cam], yFPmms[cam] = (
@@ -2028,7 +2030,7 @@ def platopoint(
 
                 # Calculate the distance from the center of the TOU, if larger than the radius, skip
 
-                r = np.sqrt((xCCDpix - offset_tou) ** 2 + (Nrows - yCCDpix - offset_tou) ** 2)
+                r = np.sqrt((xCCDpix) ** 2 + (Nrows - yCCDpix) ** 2)
 
                 if (
                     (xCCDpix >= 0)

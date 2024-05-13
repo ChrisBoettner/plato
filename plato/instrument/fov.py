@@ -74,7 +74,6 @@ def find_targets(
     """
     if not isinstance(data, (pdDataFrame, plDataFrame)):
         raise ValueError("data must be a (pandas or polars) DataFrame.")
-    data = data.copy()  # type: ignore
 
     if kwargs is None:
         kwargs = {}
@@ -84,14 +83,14 @@ def find_targets(
             "06:21:14.5 -47:53:13",
             unit=(u.hourangle, u.deg),
         )
-        kwargs["rotationAngle"] = np.deg2rad(14.0)
+        kwargs["rotationAngle"] = np.deg2rad(13.943091582693294)
 
     elif field == "LOPN1":
         kwargs["platformCoord"] = SkyCoord(
             "18:28:43.2 52:51:34",
             unit=(u.hourangle, u.deg),
         )
-        kwargs["rotationAngle"] = np.deg2rad(-14.0)
+        kwargs["rotationAngle"] = np.deg2rad(-13.943091582693294)
 
     elif isinstance(field, dict):
         # check if field is a dictionary with SkyCoord and rotationAngle
@@ -111,7 +110,7 @@ def find_targets(
 
     print(f"Field Center: RA = {kwargs['platformCoord'].ra.deg:.3f} "  # type: ignore
           f"Dec = {kwargs['platformCoord'].dec.deg:.3f} deg.")  # type: ignore
-    print(f"Rotation Angle: {np.rad2deg(kwargs["rotationAngle"]):.1f} deg.\n")
+    print(f"Rotation Angle: {np.rad2deg(kwargs["rotationAngle"]):.3f} deg.\n")
 
     try:
         data_coords = SkyCoord(ra=data["ra"], dec=data["dec"], unit="deg")
@@ -131,7 +130,7 @@ def find_targets(
         )
 
     if isinstance(data, pdDataFrame):
-        data["n_cameras"] = targets
+        data = data.assign(n_cameras=targets)
     else:
         data = data.with_columns(n_cameras=polars.Series(targets))
     return data
