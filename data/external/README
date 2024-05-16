@@ -16,3 +16,7 @@ kinematic_characteristics.csv
 	D  : Thin Disk
 	TD : Thick Disk
 	H  : Halo
+	
+PLATO_NCAM_ldcs.dat
+	Limb darkening parameter grid for PLATO. From Morello2022 (DOI 10.3847/2515-5172/aca613). Further information
+	about the columns can be found in the file itself.
