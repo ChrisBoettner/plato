@@ -68,12 +68,15 @@ class DetectionModel:
     def calculate_snr_parameter(
         self,
         data: pd.DataFrame,
+        calculate_non_transiting: bool = False,
+        non_transiting_fill_value: float = 0.0,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Calculates the transit depth, transit duration and
         lightcurve noise for a given set of parameters. Parameters
         are given in a DataFrame.
-
+        Non-transiting targets are assigned a transit depth and
+        lightcurve noise of 0, unless calculate_non_transiting is True.
 
         Parameters
         ----------
@@ -87,10 +90,15 @@ class DetectionModel:
             - "sigma_star": the standard deviation of the
                 variability of the star.
             - "cos_i": the cosine of the inclination angle of the
-                       star's planetary system.
+                    star's planetary system.
             - "u1": the first limb darkening coefficient.
             - "u2": the second limb darkening coefficient.
             - "n_cameras": the number of cameras observing the star.
+        calculate_non_transiting : bool, optional
+            If True, calculate the values for non-transiting targets as well,
+            by default False.
+        non_transiting_fill_value : float, optional
+            Value to fill non-transiting targets with, by default 0.
 
         Returns
         -------
@@ -98,14 +106,6 @@ class DetectionModel:
             A tuple containing the transit depth, transit duration
             and lightcurve noise. Transit duration is given in hours.
         """
-
-        transit_depth = self.transit_model.calculate_transit_depth(
-            r_p=data["R_planet"].to_numpy() * u.Rearth,
-            r_star=data["R_star"].to_numpy() * u.Rsun,
-            cos_i=data["cos_i"].to_numpy(),
-            u1=data["u1"].to_numpy(),
-            u2=data["u2"].to_numpy(),
-        )
 
         transit_duration = self.transit_model.calculate_transit_duration(
             porb=data["P_orb"].to_numpy() * u.day,
@@ -115,11 +115,46 @@ class DetectionModel:
             cos_i=data["cos_i"].to_numpy(),
         )
 
-        lightcurve_noise = self.noise_model.calculate_noise(
-            magnitude_v=data["Magnitude_V"].to_numpy(),
-            n_cameras=data["n_cameras"].to_numpy(),
-            stellar_variability=data["sigma_star"].to_numpy(),
-        )
+        if calculate_non_transiting:
+            transit_depth = self.transit_model.calculate_transit_depth(
+                r_p=data["R_planet"].to_numpy() * u.Rearth,
+                r_star=data["R_star"].to_numpy() * u.Rsun,
+                cos_i=data["cos_i"].to_numpy(),
+                u1=data["u1"].to_numpy(),
+                u2=data["u2"].to_numpy(),
+            )
+            lightcurve_noise = self.noise_model.calculate_noise(
+                magnitude_v=data["Magnitude_V"].to_numpy(),
+                n_cameras=data["n_cameras"].to_numpy(),
+                stellar_variability=data["sigma_star"].to_numpy(),
+            )
+        else:
+            transiting_mask = transit_duration > 0
+            data_transiting = data[transiting_mask]
+
+            transit_depth_transiting = self.transit_model.calculate_transit_depth(
+                r_p=data_transiting["R_planet"].to_numpy() * u.Rearth,
+                r_star=data_transiting["R_star"].to_numpy() * u.Rsun,
+                cos_i=data_transiting["cos_i"].to_numpy(),
+                u1=data_transiting["u1"].to_numpy(),
+                u2=data_transiting["u2"].to_numpy(),
+            )
+            lightcurve_noise_transiting = self.noise_model.calculate_noise(
+                magnitude_v=data_transiting["Magnitude_V"].to_numpy(),
+                n_cameras=data_transiting["n_cameras"].to_numpy(),
+                stellar_variability=data_transiting["sigma_star"].to_numpy(),
+            )
+
+            transit_depth = np.full(
+                len(data),
+                non_transiting_fill_value,
+            ).astype(float)
+            lightcurve_noise = np.full(
+                len(data),
+                non_transiting_fill_value,
+            ).astype(float)
+            transit_depth[transiting_mask] = transit_depth_transiting
+            lightcurve_noise[transiting_mask] = lightcurve_noise_transiting
 
         return (
             np.array(transit_depth),
@@ -162,10 +197,21 @@ class DetectionModel:
             The signal-to-noise ratio (SNR).
 
         """
+        transit_depth = np.asarray(transit_depth)
+        transit_duration = np.asarray(transit_duration)
+        lightcurve_noise = np.asarray(lightcurve_noise)
+
         N_transits = t_mission.to(u.year).value // p_orb.to(u.year).value
         N_transits = N_transits + 1 if extra_transit else N_transits
 
-        snr = transit_depth / lightcurve_noise * np.sqrt(N_transits * transit_duration)
+        # find trasiting targets
+        mask = transit_duration > 0
+        snr = np.zeros_like(transit_depth)
+        snr[mask] = (
+            transit_depth[mask]
+            / (lightcurve_noise[mask])
+            * np.sqrt(N_transits[mask] * transit_duration[mask])
+        )
         return snr
 
     @staticmethod
@@ -341,7 +387,6 @@ class DetectionModel:
             )
             for x in [False, True]
         ]
-        breakpoint()
 
         # Calculate detection efficiencies for N and N+1 transits, depending on
         # detection efficiency model
