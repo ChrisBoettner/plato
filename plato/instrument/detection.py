@@ -117,8 +117,10 @@ class DetectionModel:
 
         if calculate_non_transiting:
             transit_depth = self.transit_model.calculate_transit_depth(
+                porb=data["P_orb"].to_numpy() * u.day,
                 r_p=data["R_planet"].to_numpy() * u.Rearth,
                 r_star=data["R_star"].to_numpy() * u.Rsun,
+                m_star=data["M_star"].to_numpy() * u.Msun,
                 cos_i=data["cos_i"].to_numpy(),
                 u1=data["u1"].to_numpy(),
                 u2=data["u2"].to_numpy(),
@@ -133,8 +135,10 @@ class DetectionModel:
             data_transiting = data[transiting_mask]
 
             transit_depth_transiting = self.transit_model.calculate_transit_depth(
+                porb=data_transiting["P_orb"].to_numpy() * u.day,
                 r_p=data_transiting["R_planet"].to_numpy() * u.Rearth,
                 r_star=data_transiting["R_star"].to_numpy() * u.Rsun,
+                m_star=data_transiting["M_star"].to_numpy() * u.Msun,
                 cos_i=data_transiting["cos_i"].to_numpy(),
                 u1=data_transiting["u1"].to_numpy(),
                 u2=data_transiting["u2"].to_numpy(),

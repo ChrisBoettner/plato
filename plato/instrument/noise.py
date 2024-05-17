@@ -446,7 +446,7 @@ class NoiseModel:
         self,
         magnitude_v: float | np.ndarray,
         n_cameras: int | np.ndarray,
-        stellar_variability: float | np.ndarray = 10e-6,
+        stellar_variability: float | np.ndarray = 0,
     ) -> float | np.ndarray:
         """
         Calculate the relative lightcurve noise.
@@ -467,6 +467,8 @@ class NoiseModel:
             The apparent V magnitude of the star.
         n_cameras : int
             The number of cameras observing the star.
+        stellar_variability : float | np.ndarray, optional
+            The standard deviation of the stellar variability, by default 0.
 
         Returns
         -------

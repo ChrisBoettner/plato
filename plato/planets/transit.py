@@ -7,6 +7,32 @@ class TransitModel:
     def __init__(self) -> None:
         pass
 
+    def calculate_impact_parameter(
+        self,
+        a: u.Quantity[u.AU],
+        r_star: u.Quantity[u.Rsun],
+        cos_i: float | np.ndarray,
+    ) -> float | np.ndarray:
+        """
+        Calculate the impact parameter for a given set of parameters.
+
+        Parameters
+        ----------
+        a : u.Quantity[u.AU]
+            Semimajor axis of the planet's orbit, in astronomical units.
+        r_star : u.Quantity[u.Rsun]
+            Radius of the star, in solar radii.
+        cos_i : float | np.ndarray
+            Cosine of the inclination angle of the planet's orbit.
+
+        Returns
+        -------
+        float | np.ndarray
+            Impact parameter.
+        """
+
+        return (a / r_star).decompose().value * cos_i
+
     def calculate_transit_duration(
         self,
         porb: u.Quantity[u.day],
@@ -84,8 +110,10 @@ class TransitModel:
 
     def calculate_transit_depth(
         self,
+        porb: u.Quantity[u.day],
         r_p: u.Quantity[u.Rearth],
         r_star: u.Quantity[u.Rsun],
+        m_star: u.Quantity[u.Msun],
         cos_i: float | np.ndarray,
         u1: float | np.ndarray,
         u2: float | np.ndarray,
@@ -97,10 +125,14 @@ class TransitModel:
 
         Parameters
         ----------
+        porb : u.Quantity[u.day]
+            Orbital period of the planet, in days.
         r_p : u.Quantity[u.Rearth]
             Radius of the planet, in Earth radii.
         r_star : u.Quantity[u.Rsun]
             Radius of the star, in solar radii.
+        m_star : u.Quantity[u.Msun]
+            Mass of the star, in solar masses.
         cos_i : float | np.ndarray
             Cosine of the inclination angle of the planet's orbit.
         u1 : float | np.ndarray
@@ -114,12 +146,17 @@ class TransitModel:
             Transit depth.
         """
 
+        a = self.calculate_semimajor_axis(porb, m_star)
         radius_ratio = (r_p / r_star).decompose()
 
-        return radius_ratio**2 * self.calculate_limb_darkening_correction(cos_i, u1, u2)
+        return radius_ratio**2 * self.calculate_limb_darkening_correction(
+            a, r_star, cos_i, u1, u2
+        )
 
     def calculate_limb_darkening_correction(
         self,
+        a: u.Quantity[u.AU],
+        r_star: u.Quantity[u.Rsun],
         cos_i: float | np.ndarray,
         u1: float | np.ndarray,
         u2: float | np.ndarray,
@@ -127,9 +164,15 @@ class TransitModel:
         """
         Calculate the limb darkening correction for a given set of parameters,
         following Heller et al. (2019), using the quadratic limb darkening law.
+        For parameter values where the planet does not transit the star, the
+        correction factor is set to zero.
 
         Parameters
         ----------
+        a : u.Quantity[u.AU]
+            Semimajor axis of the planet's orbit, in astronomical units.
+        r_star : u.Quantity[u.Rsun]
+            Radius of the star, in solar radii.
         cos_i : float | np.ndarray
             Cosine of the inclination angle of the planet's orbit.
         u1 : float | np.ndarray
@@ -143,8 +186,19 @@ class TransitModel:
             Limb darkening correction factor.
 
         """
-        cos_gamma = np.sqrt(1 - cos_i**2)  # gamma = pi/2 - i, and using trig identity
+        cos_i = np.asarray(cos_i)
+        u1 = np.asarray(u1)
+        u2 = np.asarray(u2)
 
-        I_p = 1 - u1 * (1 - cos_gamma) - u2 * (1 - cos_gamma) ** 2
-        I_A = 1 - u1 / 3 - u2 / 6
-        return I_p / I_A
+        b = self.calculate_impact_parameter(a, r_star, cos_i)
+        b = np.asarray(b)
+
+        mask = b < 1
+        corr_factor = np.full(a.shape, 0)
+
+        coeff = np.sqrt(1 - b[mask] ** 2)
+        I_p = 1 - u1[mask] * (1 - coeff) - u2[mask] * (1 - coeff) ** 2
+        I_A = 1 - u1[mask] / 3 - u2[mask] / 6
+
+        corr_factor[mask] = I_p / I_A
+        return corr_factor
