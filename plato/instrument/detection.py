@@ -6,7 +6,7 @@ from astropy import units as u
 from scipy.stats import gamma
 
 from plato.instrument.noise import NoiseModel
-from plato.planets import TransitModel
+from plato.planets.transit import TransitModel
 
 
 class DetectionModel:
@@ -39,6 +39,7 @@ class DetectionModel:
         self.noise_model = NoiseModel() if noise_model is None else noise_model
         self.transit_model = TransitModel() if transit_model is None else transit_model
 
+    @u.quantity_input
     def calculate_extra_transit_probability(
         self,
         t_mission: u.year,
@@ -69,7 +70,7 @@ class DetectionModel:
         self,
         data: pd.DataFrame,
         calculate_non_transiting: bool = False,
-        non_transiting_fill_value: float = 0.0,
+        fill_value: float = 0.0,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Calculates the transit depth, transit duration and
@@ -97,7 +98,7 @@ class DetectionModel:
         calculate_non_transiting : bool, optional
             If True, calculate the values for non-transiting targets as well,
             by default False.
-        non_transiting_fill_value : float, optional
+        fill_value : float, optional
             Value to fill non-transiting targets with, by default 0.
 
         Returns
@@ -107,58 +108,62 @@ class DetectionModel:
             and lightcurve noise. Transit duration is given in hours.
         """
 
-        transit_duration = self.transit_model.calculate_transit_duration(
-            porb=data["P_orb"].to_numpy() * u.day,
-            r_p=data["R_planet"].to_numpy() * u.Rearth,
-            r_star=data["R_star"].to_numpy() * u.Rsun,
-            m_star=data["M_star"].to_numpy() * u.Msun,
-            cos_i=data["cos_i"].to_numpy(),
-        )
+        # add semimajor axis column if not present (to copy of df, so
+        # original is not modified)
+        if "a" not in data.columns:
+            data = data.copy()
+            data["a"] = (
+                self.transit_model.calculate_semimajor_axis(
+                    porb=data["P_orb"].to_numpy() * u.day,
+                    m_star=data["M_star"].to_numpy() * u.Msun,
+                )
+                .to(u.AU)
+                .value
+            )
 
+        # calculate mask for transiting targets
         if calculate_non_transiting:
-            transit_depth = self.transit_model.calculate_transit_depth(
-                porb=data["P_orb"].to_numpy() * u.day,
+            transiting_mask = np.full(len(data), True)
+        else:
+            transiting_mask = self.transit_model.is_transiting(
+                a=data["a"].to_numpy() * u.AU,
                 r_p=data["R_planet"].to_numpy() * u.Rearth,
                 r_star=data["R_star"].to_numpy() * u.Rsun,
-                m_star=data["M_star"].to_numpy() * u.Msun,
                 cos_i=data["cos_i"].to_numpy(),
-                u1=data["u1"].to_numpy(),
-                u2=data["u2"].to_numpy(),
             )
-            lightcurve_noise = self.noise_model.calculate_noise(
-                magnitude_v=data["Magnitude_V"].to_numpy(),
-                n_cameras=data["n_cameras"].to_numpy(),
-                stellar_variability=data["sigma_star"].to_numpy(),
-            )
-        else:
-            transiting_mask = transit_duration > 0
-            data_transiting = data[transiting_mask]
+        data_masked = data[transiting_mask]
 
-            transit_depth_transiting = self.transit_model.calculate_transit_depth(
-                porb=data_transiting["P_orb"].to_numpy() * u.day,
-                r_p=data_transiting["R_planet"].to_numpy() * u.Rearth,
-                r_star=data_transiting["R_star"].to_numpy() * u.Rsun,
-                m_star=data_transiting["M_star"].to_numpy() * u.Msun,
-                cos_i=data_transiting["cos_i"].to_numpy(),
-                u1=data_transiting["u1"].to_numpy(),
-                u2=data_transiting["u2"].to_numpy(),
-            )
-            lightcurve_noise_transiting = self.noise_model.calculate_noise(
-                magnitude_v=data_transiting["Magnitude_V"].to_numpy(),
-                n_cameras=data_transiting["n_cameras"].to_numpy(),
-                stellar_variability=data_transiting["sigma_star"].to_numpy(),
-            )
+        # initialize arrays
+        transit_duration = np.full(len(data), float(fill_value)) * u.hour
+        transit_depth = np.full(len(data), float(fill_value))
+        lightcurve_noise = np.full(len(data), float(fill_value))
 
-            transit_depth = np.full(
-                len(data),
-                non_transiting_fill_value,
-            ).astype(float)
-            lightcurve_noise = np.full(
-                len(data),
-                non_transiting_fill_value,
-            ).astype(float)
-            transit_depth[transiting_mask] = transit_depth_transiting
-            lightcurve_noise[transiting_mask] = lightcurve_noise_transiting
+        # calculate transit depth, duration and lightcurve noise for targets
+        transit_duration_masked = self.transit_model.calculate_transit_duration(
+            a=data_masked["a"].to_numpy() * u.AU,
+            r_p=data_masked["R_planet"].to_numpy() * u.Rearth,
+            r_star=data_masked["R_star"].to_numpy() * u.Rsun,
+            m_star=data_masked["M_star"].to_numpy() * u.Msun,
+            cos_i=data_masked["cos_i"].to_numpy(),
+        )
+        transit_depth_masked = self.transit_model.calculate_transit_depth(
+            a=data_masked["a"].to_numpy() * u.AU,
+            r_p=data_masked["R_planet"].to_numpy() * u.Rearth,
+            r_star=data_masked["R_star"].to_numpy() * u.Rsun,
+            cos_i=data_masked["cos_i"].to_numpy(),
+            u1=data_masked["u1"].to_numpy(),
+            u2=data_masked["u2"].to_numpy(),
+        )
+        lightcurve_noise_masked = self.noise_model.calculate_noise(
+            magnitude_v=data_masked["Magnitude_V"].to_numpy(),
+            n_cameras=data_masked["n_cameras"].to_numpy(),
+            stellar_variability=data_masked["sigma_star"].to_numpy(),
+        )
+
+        # fill arrays with calculated values
+        transit_duration[transiting_mask] = transit_duration_masked
+        transit_depth[transiting_mask] = transit_depth_masked
+        lightcurve_noise[transiting_mask] = lightcurve_noise_masked
 
         return (
             np.array(transit_depth),
@@ -166,6 +171,7 @@ class DetectionModel:
             np.array(lightcurve_noise),
         )
 
+    @u.quantity_input
     def calculate_snr(
         self,
         transit_depth: float | np.ndarray,
@@ -291,6 +297,7 @@ class DetectionModel:
         """
         return gamma_c * gamma.cdf(snr, a=gamma_a, loc=0, scale=gamma_b)
 
+    @u.quantity_input
     def detection_efficiency(
         self,
         data: pd.DataFrame,
@@ -322,18 +329,21 @@ class DetectionModel:
         ----------
         data : pd.DataFrame
             A DataFrame containing the following columns:
-            - "R_planet": the radius of the planet, in Earth radii.
-            - "P_orb": the orbital period of the planet, in days.
-            - "R_star": the radius of the star, in solar radii.
-            - "M_star": the mass of the star, in solar masses.
-            - "Magnitude_V": the apparent magnitude of the star.
-            - "Sigma_Star": the standard deviation of the
-                variability of the star.
-            - "cos_i": the cosine of the inclination angle of the
-                       star's planetary system.
-            - "u1": the first limb darkening coefficient.
-            - "u2": the second limb darkening coefficient.
-            - "n_cameras": the number of cameras observing the star.
+                - "R_planet": the radius of the planet, in Earth radii.
+                - "R_star": the radius of the star, in solar radii.
+                - "M_star": the mass of the star, in solar masses.
+                - "Magnitude_V": the apparent magnitude of the star.
+                - "sigma_star": the standard deviation of the
+                    variability of the star.
+                - "cos_i": the cosine of the inclination angle of the
+                        star's planetary system.
+                - "u1": the first limb darkening coefficient.
+                - "u2": the second limb darkening coefficient.
+                - "n_cameras": the number of cameras observing the star.
+            Additionally, either
+                - "a": the semimajor axis of the planet's orbit, in AU, or
+                - "P_orb": the orbital period of the planet, in days.
+            must be present.
         t_mission : u.year, optional
             The duration of the mission, by default 2 years.
         min_transits : int, optional
@@ -362,7 +372,6 @@ class DetectionModel:
         # check if necessary columns are present in data
         required_columns = [
             "R_planet",
-            "P_orb",
             "R_star",
             "M_star",
             "Magnitude_V",
@@ -375,6 +384,44 @@ class DetectionModel:
         for col in required_columns:
             if col not in data.columns:
                 raise ValueError(f"Missing column {col!r} in data.")
+
+        # check if either a or P_orb is present in data, and calculate the other
+        if "a" not in data.columns and "P_orb" not in data.columns:
+            raise ValueError("Either 'a' or 'P_orb' must be present in data.")
+
+        elif "P_orb" in data.columns and "a" not in data.columns:
+            if "M_star" not in data.columns:
+                raise ValueError(
+                    "Column 'M_star' needed to calculate 'a' from 'P_orb'."
+                )
+            data["a"] = (
+                self.transit_model.calculate_semimajor_axis(
+                    porb=data["P_orb"].to_numpy() * u.day,
+                    m_star=data["M_star"].to_numpy() * u.Msun,
+                )
+                .to(u.AU)
+                .value
+            )
+
+        elif "a" in data.columns and "P_orb" not in data.columns:
+            if "M_star" not in data.columns:
+                raise ValueError(
+                    "Column 'M_star' needed to calculate 'P_orb' from 'a'."
+                )
+
+            data["P_orb"] = (
+                self.transit_model.calculate_orbital_period(
+                    a=data["a"].to_numpy() * u.AU,
+                    m_star=data["M_star"].to_numpy() * u.Msun,
+                )
+                .to(u.day)
+                .value
+            )
+        else:
+            raise NotImplementedError(
+                "Both 'a' and 'P_orb' are present in data. "
+                "This is not currently considered."
+            )
 
         # calculate SNR for N and N+1 transits
         transit_depth, transit_duration, lightcurve_noise = (

@@ -1,5 +1,5 @@
-from plato.planets.transit import TransitModel
+from plato.planets.populations import PopulationModel
 
 __all__ = [
-    "TransitModel",
+    "PopulationModel",
 ]

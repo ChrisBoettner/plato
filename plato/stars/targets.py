@@ -130,7 +130,7 @@ def filter_valid_targets(
             & dataframe["[Fe/H]"].notnull()
         )
 
-    return target_dataframe[conditions(target_dataframe)]
+    return target_dataframe[conditions(target_dataframe)].reset_index(drop=True)
 
 
 def update_field_dataframe(
