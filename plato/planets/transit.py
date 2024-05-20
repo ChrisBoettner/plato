@@ -13,6 +13,40 @@ class TransitModel:
         pass
 
     @u.quantity_input
+    def calculate_Roche_limit(
+        self,
+        m_p: u.Quantity[u.Mearth],
+        r_p: u.Quantity[u.Rearth],
+        m_star: u.Quantity[u.Msun],
+        r_star: u.Quantity[u.Rsun],
+    ) -> u.Quantity[u.AU]:
+        """
+        Calculate the Roche limit for the star-planet system.
+
+        Parameters
+        ----------
+        m_p : u.Quantity[u.Mearth]
+            Mass of the planet, in Earth masses.
+        r_p : u.Quantity[u.Rearth]
+            Radius of the planet, in Earth radii.
+        m_star : u.Quantity[u.Msun]
+            Mass of the star, in solar masses.
+        r_star : u.Quantity[u.Rsun]
+            Radius of the star, in solar radii.
+
+        Returns
+        -------
+        u.Quantity[u.AU]
+            Roche limit of the star-planet system, in astronomical units.
+        """
+
+        star_density = m_star / (4 / 3 * np.pi * r_star**3)
+        planet_density = m_p / (4 / 3 * np.pi * r_p**3)
+        q = planet_density / star_density
+
+        return 2.44 * r_star.to(u.AU) * q ** (1 / 3)
+
+    @u.quantity_input
     def calculate_orbital_period(
         self,
         a: u.Quantity[u.AU],

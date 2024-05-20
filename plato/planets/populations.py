@@ -112,6 +112,7 @@ class PopulationModel:
             ngpps_population = ngpps_population[
                 [
                     "system_id",
+                    "planet_id",
                     "total_radius",
                     "total_mass",
                     "semi_major_axis",
@@ -332,11 +333,44 @@ class PopulationModel:
         return system_ids
 
     def create_mock_population(
-        self, return_stellar_parameter: bool = True
+        self,
+        decay_parameter: float = 10,
+        metallicity_limit: Optional[float] = None,
     ) -> pd.DataFrame:
+        """
+        Create a mock population of planetary systems by assigning
+        random planetary systems to stars in the stellar population.
+        The assigment probability is [Fe/H]-dependent, and calculated
+        in the calculate_probabilities method. The planetary systems
+        are also assigned random inclination angles.
+
+        The assigned planets are checked for Roche limit crossing,
+        and any planets that cross the Roche limit are removed from
+        the mock population.
+
+        Parameters
+        ----------
+        decay_parameter : float
+            The rate parameter of the exponential distribution
+            used to calculate the probabilities of assigning a
+            system to a star, by default 10. With a value of 10,
+            the probability of assigning a system drops by a factor
+            of 10 for each 0.1 dex difference in metallicity.
+        metallicity_limit : Optional[float], optional
+            The minimum metallicity of the star to be included in
+            the mock population. If None, no limit is
+            applied, by default None.
+
+        Returns
+        -------
+        pd.DataFrame
+            The mock population of planetary systems, with the assigned
+            planetary systems, stellar properties, and random inclination
+            angles.
+        """
 
         # assign random systems to stars
-        system_ids = self.assign_random_systems()
+        system_ids = self.assign_random_systems(decay_parameter=decay_parameter)
 
         # assign random inlcination angles (cos(i) is uniform between 0 and 1)
         random_cos_i = np.random.rand(self.stellar_population.shape[0])
@@ -346,42 +380,90 @@ class PopulationModel:
         systems = pd.concat([self.system_populations[ind - 1] for ind in system_ids])
         num_planets = [self.system_num_planets[ind - 1] for ind in system_ids]
 
-        if return_stellar_parameter:
-            stellar_properties = self.stellar_population.copy()
-            stellar_properties["cos_i"] = random_cos_i
+        stellar_properties = self.stellar_population.copy()
+        stellar_properties["cos_i"] = random_cos_i
 
-            stellar_properties = stellar_properties.loc[
-                np.repeat(
-                    stellar_properties.index,
-                    num_planets,
-                )
-            ].reset_index(drop=True)
-
-            systems = pd.concat(
-                [
-                    systems.reset_index(drop=True),
-                    stellar_properties.reset_index(drop=True),
-                ],
-                axis=1,
+        stellar_properties = stellar_properties.loc[
+            np.repeat(
+                stellar_properties.index,
+                num_planets,
             )
+        ].reset_index(drop=True)
+
+        systems = pd.concat(
+            [
+                systems.reset_index(drop=True),
+                stellar_properties.reset_index(drop=True),
+            ],
+            axis=1,
+        )
 
         # remove impossible planets
-        semi_major_axis = systems["a"].to_numpy() * u.AU
-        radius_planet = systems["R_planet"].to_numpy() * u.Rearth
-        radius_star = systems["R_star"].to_numpy() * u.Rsun
-        systems = systems[
-            (semi_major_axis / (radius_planet + radius_star)).decompose() > 1
-        ]
+        roche_limit = self.detection_model.transit_model.calculate_Roche_limit(
+            m_p=systems["M_planet"].to_numpy() * u.Mearth,
+            r_p=systems["R_planet"].to_numpy() * u.Rearth,
+            m_star=systems["M_star"].to_numpy() * u.Msun,
+            r_star=systems["R_star"].to_numpy() * u.Rsun,
+        )
+        systems = systems[systems["a"] > roche_limit]
 
-        return systems
+        if metallicity_limit:
+            systems = systems[systems["[Fe/H]"] > metallicity_limit]
+        return systems.reset_index(drop=True)
 
     def create_mock_observation(
         self,
-        return_full: bool = False,
+        decay_parameter: float = 10,
+        metallicity_limit: Optional[float] = None,
+        result_format: str = "minimal",
         remove_zeros: bool = True,
     ) -> pd.DataFrame:
+        """
+        Create a mock observation of the NGPPS population.
+        First creates a mock population using the create_mock_population
+        method, then calculates the detection efficiency of each planet
+        in the mock population using the detection model.
 
-        mock_population = self.create_mock_population()
+        Parameters
+        ----------
+        decay_parameter : float
+            The rate parameter of the exponential distribution
+            used to calculate the probabilities of assigning a
+            system to a star, by default 10. With a value of 10,
+            the probability of assigning a system drops by a factor
+            of 10 for each 0.1 dex difference in metallicity.
+        metallicity_limit : Optional[float], optional
+            The minimum metallicity of the star to be included in
+            the mock population. If None, no limit is
+            applied, by default None.
+        result_format : str, optional
+            The format of the result DataFrame. Must be one of
+            'minimal', 'reconstructable', or 'full'.
+            The available formats are:
+                - 'minimal': contains the planet radius, mass,
+                             semi-major axis, and detection efficiency.
+                - 'reconstructable': contains the 'minimal' columns,
+                                     plus the cos_i, system_id,
+                                     planet_id, and gaiaID_DR3. Can be
+                                     used to reconstruct all columns.
+                - 'full': contains all columns in the mock population,
+                          including the stellar parameters,
+            by default "minimal".
+        remove_zeros : bool, optional
+            If True, planets with a detection efficiency of 0 are
+            removed from the mock population, by default True.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the mock observation of the NGPPS
+            population, at the specified level of detail.
+        """
+
+        mock_population = self.create_mock_population(
+            decay_parameter=decay_parameter,
+            metallicity_limit=metallicity_limit,
+        )
         mock_population["detection_efficiency"] = (
             self.detection_model.detection_efficiency(mock_population)
         )
@@ -391,13 +473,33 @@ class PopulationModel:
                 mock_population["detection_efficiency"] > 0
             ]
 
-        if not return_full:
+        if result_format == "minimal":
             mock_population = mock_population[
                 [
                     "R_planet",
                     "M_planet",
+                    "a",
                     "detection_efficiency",
                 ]
             ]
+        elif result_format == "reconstructable":
+            mock_population = mock_population[
+                [
+                    "R_planet",
+                    "M_planet",
+                    "a",
+                    "detection_efficiency",
+                    "cos_i",
+                    "system_id",
+                    "planet_id",
+                    "gaiaID_DR3",
+                ]
+            ]
+        elif result_format == "full":
+            pass
+        else:
+            raise ValueError(
+                "return_full must be one of 'minimal', 'reconstructable', or 'full'."
+            )
 
         return mock_population.reset_index(drop=True)
