@@ -394,6 +394,7 @@ class DetectionModel:
                 raise ValueError(
                     "Column 'M_star' needed to calculate 'a' from 'P_orb'."
                 )
+            data = data.copy()
             data["a"] = (
                 self.transit_model.calculate_semimajor_axis(
                     porb=data["P_orb"].to_numpy() * u.day,
@@ -408,7 +409,7 @@ class DetectionModel:
                 raise ValueError(
                     "Column 'M_star' needed to calculate 'P_orb' from 'a'."
                 )
-
+            data = data.copy()
             data["P_orb"] = (
                 self.transit_model.calculate_orbital_period(
                     a=data["a"].to_numpy() * u.AU,

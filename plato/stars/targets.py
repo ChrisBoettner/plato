@@ -1,5 +1,8 @@
+from typing import Callable, Optional
+
 import pandas as pd
-from typing import Optional, Callable
+
+from plato.instrument.noise import NoiseModel
 
 
 def quality_cuts(
@@ -131,6 +134,51 @@ def filter_valid_targets(
         )
 
     return target_dataframe[conditions(target_dataframe)].reset_index(drop=True)
+
+
+def filter_p1_targets(
+    target_dataframe: pd.DataFrame,
+    V_limit: float = 11,
+    noise_limit: float = 50e-6,
+) -> pd.DataFrame:
+    """
+    Filter the target dataframe to only include
+    targets compliant with the P1 requirements.
+    The requirements are:
+        - V < V_limit (11)
+        - Random noise in V < noise_limit (50e-6)
+
+    The input dataframe must have the following columns:
+        - Magnitude_V
+        - n_cameras
+
+    Parameters
+    ----------
+    target_dataframe : pd.DataFrame
+        The target dataframe to filter, with
+        the required columns.
+    V_limit : float, optional
+        V magnitude limit, by default 11
+    noise_limit : float, optional
+        Random noise limit, by default 50e-6
+
+    Returns
+    -------
+    pd.DataFrame
+        The target dataframe filtered for P1 requirements.
+    """
+
+    p1_sample = target_dataframe[target_dataframe["Magnitude_V"] < V_limit]
+
+    p1_sample = p1_sample[
+        NoiseModel().random_noise(
+            p1_sample["Magnitude_V"].to_numpy(),
+            p1_sample["n_cameras"].to_numpy(),
+        )
+        < noise_limit
+    ]
+    assert isinstance(p1_sample, pd.DataFrame)
+    return p1_sample
 
 
 def update_field_dataframe(

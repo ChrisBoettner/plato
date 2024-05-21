@@ -336,6 +336,7 @@ class PopulationModel:
         self,
         decay_parameter: float = 10,
         metallicity_limit: Optional[float] = None,
+        result_format: str = "full",
     ) -> pd.DataFrame:
         """
         Create a mock population of planetary systems by assigning
@@ -360,6 +361,19 @@ class PopulationModel:
             The minimum metallicity of the star to be included in
             the mock population. If None, no limit is
             applied, by default None.
+        result_format : str, optional
+            The format of the result DataFrame. Must be one of
+            'minimal', 'reconstructable', or 'full'.
+            The available formats are:
+                - 'minimal': contains the planet radius, mass,
+                             semi-major axis, and detection efficiency.
+                - 'reconstructable': contains the 'minimal' columns,
+                                     plus the cos_i, system_id,
+                                     planet_id, and gaiaID_DR3. Can be
+                                     used to reconstruct all columns.
+                - 'full': contains all columns in the mock population,
+                          including the stellar parameters,
+            by default "full".
 
         Returns
         -------
@@ -409,6 +423,8 @@ class PopulationModel:
 
         if metallicity_limit:
             systems = systems[systems["[Fe/H]"] > metallicity_limit]
+
+        systems = self._format_results(systems, result_format)
         return systems.reset_index(drop=True)
 
     def create_mock_observation(
@@ -473,8 +489,45 @@ class PopulationModel:
                 mock_population["detection_efficiency"] > 0
             ]
 
+        mock_population = self._format_results(mock_population, result_format)
+
+        return mock_population.reset_index(drop=True)
+
+    def _format_results(
+        self,
+        dataframe: pd.DataFrame,
+        result_format: str,
+    ) -> pd.DataFrame:
+        """
+        Format the results of the mock population or observation
+        to the specified format.
+
+        Parameters
+        ----------
+        dataframe : pd.DataFrame
+            The DataFrame containing the mock population or observation.
+        result_format : str,
+            The format of the result DataFrame. Must be one of
+            'minimal', 'reconstructable', or 'full'.
+            The available formats are:
+                - 'minimal': contains the planet radius, mass,
+                             semi-major axis, and detection efficiency.
+                - 'reconstructable': contains the 'minimal' columns,
+                                     plus the cos_i, system_id,
+                                     planet_id, and gaiaID_DR3. Can be
+                                     used to reconstruct all columns.
+                - 'full': contains all columns in the mock population,
+                          including the stellar parameters.
+
+        Returns
+        -------
+        pd.DataFrame
+            The formatted DataFrame containing the mock population
+            or observation.
+
+        """
         if result_format == "minimal":
-            mock_population = mock_population[
+            dataframe = dataframe[
                 [
                     "R_planet",
                     "M_planet",
@@ -483,7 +536,7 @@ class PopulationModel:
                 ]
             ]
         elif result_format == "reconstructable":
-            mock_population = mock_population[
+            dataframe = dataframe[
                 [
                     "R_planet",
                     "M_planet",
@@ -501,5 +554,4 @@ class PopulationModel:
             raise ValueError(
                 "return_full must be one of 'minimal', 'reconstructable', or 'full'."
             )
-
-        return mock_population.reset_index(drop=True)
+        return dataframe

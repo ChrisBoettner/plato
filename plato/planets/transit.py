@@ -142,10 +142,11 @@ class TransitModel:
 
         inner_term = np.clip(term1**2 - term2**2, 0, None)
         outer_term = np.where(
-            np.abs(cos_i) < 1,
+            (np.abs(cos_i) < 1),
             (r_star / a).decompose().value * np.sqrt(inner_term / (1 - cos_i**2)),
             0,
         )
+        outer_term[outer_term > 1] = 0  # deals with planets that are too close
 
         t_transit = porb / np.pi * np.arcsin(outer_term)
 
