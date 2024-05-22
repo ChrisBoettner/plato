@@ -219,3 +219,33 @@ class FigureProcessor:
         if save:
             assert isinstance(self.figure, Figure)
             self.figure.savefig(path, bbox_inches="tight", pad_inches=0)
+
+
+def get_earth_marker(**kwargs: Any) -> dict[str, Any]:
+    """
+    Create a marker for Earth, for use in plots.
+    Default parameters are set to create a
+    white empty circle, located at x=365, y=1
+    (period, radius) with a size of 200.
+    Parameters can be overwritten and adjusted
+    by passing them as keyword arguments.
+
+
+    Returns
+    -------
+    dict[str, Any]
+        The marker parameters.
+    """
+
+    default_params = {
+        "x": 365,
+        "y": 1,
+        "s": 200,
+        "linewidth": 2.5,
+        "alpha": 0.8,
+        "facecolors": "none",
+        "edgecolors": "white",
+        "zorder": 1000,
+    }
+    earth_marker = {**default_params, **kwargs}
+    return earth_marker
