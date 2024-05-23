@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Optional, Callable
 
 import numpy as np
 import pandas as pd
@@ -20,6 +20,7 @@ class PopulationModel:
         num_embryos: int,
         snapshot_age: int = int(1e8),
         detection_model: Optional[DetectionModel] = None,
+        additional_columns: Optional[str | list[str]] = None,
         keep_all_columns: bool = False,
         keep_invalid: bool = False,
         **kwargs: Any,
@@ -52,8 +53,11 @@ class PopulationModel:
         detection_model : Optional[DetectionModel], optional
             A detection model to use for the mock observations, by default None.
             If None, detection model with default parameters is used.
-        keep_all_columns : bool, optional
-            If True, all columns in the stellar population DataFrame are
+        additional_columns : Optional[str | list[str]], optional
+            A list of additional columns to include in the stellar population
+            DataFrame, by default None.
+        keep_columns : bool, optional
+            If True, all columns in the stellar and NGPPS population DataFrames are
             kept. Otherwise, only the required columns are kept, by default False.
         keep_invalid : bool, optional
             If True, invalid planetary systems are kept in the NGPPS population.
@@ -77,6 +81,13 @@ class PopulationModel:
             "u2",
             "n_cameras",
         ]
+        if additional_columns:
+            additional_columns = (
+                [additional_columns]
+                if isinstance(additional_columns, str)
+                else additional_columns
+            )
+            stellar_population_columns += additional_columns
 
         if "gaiaID_DR3" in stellar_population.columns:
             stellar_population_columns += ["gaiaID_DR3"]
@@ -332,11 +343,86 @@ class PopulationModel:
         system_ids = random_indices + 1
         return system_ids
 
+    def add_planet_category(
+        self,
+        dataframe: pd.DataFrame,
+        category_dict: Optional[dict[str, Callable]] = None,
+    ) -> pd.DataFrame:
+        """
+        Add a column to the DataFrame containing the planet population
+        with the category of each planet, based on the mass of the
+        planet. The categories are defined by the category_dict
+        argument, which is a dictionary mapping the category name
+        to a function that takes a row of the DataFrame and returns
+        a boolean value indicating whether the planet belongs to
+        that category.
+
+        The default categories are:
+            - Dwarf: M_planet < 0.5
+            - Earth: 0.5 <= M_planet < 2
+            - Super-Earth: 2 <= M_planet < 10
+            - Neptunian: 10 <= M_planet < 30
+            - Sub-Giant: 30 <= M_planet < 300
+            - Giant: 300 <= M_planet
+
+        Parameters
+        ----------
+        dataframe : pd.DataFrame
+            The DataFrame containing the planet population,
+            must contain the 'M_planet' column.
+        category_dict : , optional
+            A dictionary mapping the category name to a function
+            that takes a row of the DataFrame and returns a boolean
+            value indicating whether the planet belongs to that
+            category. If categories are overlapping, the first
+            category that returns True is assigned to the planet,
+            by default None. If None, the default categories
+            are used.
+
+        Returns
+        -------
+        pd.DataFrame
+            The DataFrame containing the planet population, with
+            the 'Planet Category' column added. If no category is
+            assigned, the category is set to 'Unknown'.
+
+        """
+        if category_dict is None:
+            conditions = [
+                dataframe["M_planet"] < 0.5,
+                (dataframe["M_planet"] >= 0.5) & (dataframe["M_planet"] < 2),
+                (dataframe["M_planet"] >= 2) & (dataframe["M_planet"] < 10),
+                (dataframe["M_planet"] >= 10) & (dataframe["M_planet"] < 30),
+                (dataframe["M_planet"] >= 30) & (dataframe["M_planet"] < 300),
+                dataframe["M_planet"] >= 300,
+            ]
+            categories = [
+                "Dwarf",
+                "Earth",
+                "Super-Earth",
+                "Neptunian",
+                "Sub-Giant",
+                "Giant",
+            ]
+        else:
+            conditions = [
+                dataframe.apply(condition, axis=1)
+                for condition in category_dict.values()
+            ]
+            categories = list(category_dict.keys())
+
+        dataframe["Planet Category"] = np.select(
+            conditions, categories, default="Unknown"
+        )
+        return dataframe
+
     def create_mock_population(
         self,
         decay_parameter: float = 10,
         metallicity_limit: Optional[float] = None,
-        result_format: str = "full",
+        add_planet_category: bool = True,
+        result_format: str = "minimal",
+        additional_columns: Optional[str | list[str]] = None,
     ) -> pd.DataFrame:
         """
         Create a mock population of planetary systems by assigning
@@ -344,6 +430,11 @@ class PopulationModel:
         The assigment probability is [Fe/H]-dependent, and calculated
         in the calculate_probabilities method. The planetary systems
         are also assigned random inclination angles.
+
+        A TargetID column is added to the mock population, to identify
+        each unique system. This is in contrast to the system_id and
+        planet_id columns, which are the indices of the system and
+        planet in the NGPPS population, and can have duplicates.
 
         The assigned planets are checked for Roche limit crossing,
         and any planets that cross the Roche limit are removed from
@@ -361,6 +452,9 @@ class PopulationModel:
             The minimum metallicity of the star to be included in
             the mock population. If None, no limit is
             applied, by default None.
+        add_planet_category : bool, optional
+            If True, a column containing the planet category is
+            added to the mock population, by default True.
         result_format : str, optional
             The format of the result DataFrame. Must be one of
             'minimal', 'reconstructable', or 'full'.
@@ -374,6 +468,9 @@ class PopulationModel:
                 - 'full': contains all columns in the mock population,
                           including the stellar parameters,
             by default "full".
+        additional_columns : Optional[str | list[str]], optional
+            A list of additional columns to include in the result DataFrame,
+            by default None.
 
         Returns
         -------
@@ -402,37 +499,51 @@ class PopulationModel:
                 stellar_properties.index,
                 num_planets,
             )
-        ].reset_index(drop=True)
+        ].reset_index(drop=False, names="TargetID")
 
         systems = pd.concat(
             [
                 systems.reset_index(drop=True),
-                stellar_properties.reset_index(drop=True),
+                stellar_properties,
             ],
             axis=1,
         )
 
         # remove impossible planets
-        roche_limit = self.detection_model.transit_model.calculate_Roche_limit(
-            m_p=systems["M_planet"].to_numpy() * u.Mearth,
-            r_p=systems["R_planet"].to_numpy() * u.Rearth,
-            m_star=systems["M_star"].to_numpy() * u.Msun,
-            r_star=systems["R_star"].to_numpy() * u.Rsun,
+        roche_limit = (
+            self.detection_model.transit_model.calculate_Roche_limit(
+                m_p=systems["M_planet"].to_numpy() * u.Mearth,
+                r_p=systems["R_planet"].to_numpy() * u.Rearth,
+                m_star=systems["M_star"].to_numpy() * u.Msun,
+                r_star=systems["R_star"].to_numpy() * u.Rsun,
+            )
+            .to(u.AU)
+            .value
         )
         systems = systems[systems["a"] > roche_limit]
 
         if metallicity_limit:
             systems = systems[systems["[Fe/H]"] > metallicity_limit]
 
-        systems = self._format_results(systems, result_format)
+        systems = self._format_results(
+            systems,
+            result_format,
+            additional_columns=additional_columns,
+        )
+
+        if add_planet_category:
+            systems = self.add_planet_category(systems)
+
         return systems.reset_index(drop=True)
 
     def create_mock_observation(
         self,
         decay_parameter: float = 10,
         metallicity_limit: Optional[float] = None,
-        result_format: str = "minimal",
+        add_planet_category: bool = False,
         remove_zeros: bool = True,
+        result_format: str = "minimal",
+        additional_columns: Optional[str | list[str]] = None,
     ) -> pd.DataFrame:
         """
         Create a mock observation of the NGPPS population.
@@ -452,6 +563,12 @@ class PopulationModel:
             The minimum metallicity of the star to be included in
             the mock population. If None, no limit is
             applied, by default None.
+        add_planet_category : bool, optional
+            If True, a column containing the planet category is
+            added to the mock population, by default False.
+        remove_zeros : bool, optional
+            If True, planets with a detection efficiency of 0 are
+            removed from the mock population, by default True.
         result_format : str, optional
             The format of the result DataFrame. Must be one of
             'minimal', 'reconstructable', or 'full'.
@@ -465,9 +582,9 @@ class PopulationModel:
                 - 'full': contains all columns in the mock population,
                           including the stellar parameters,
             by default "minimal".
-        remove_zeros : bool, optional
-            If True, planets with a detection efficiency of 0 are
-            removed from the mock population, by default True.
+        additional_columns : Optional[str | list[str]], optional
+            A list of additional columns to include in the result DataFrame,
+            by default None.
 
         Returns
         -------
@@ -479,6 +596,7 @@ class PopulationModel:
         mock_population = self.create_mock_population(
             decay_parameter=decay_parameter,
             metallicity_limit=metallicity_limit,
+            result_format="full",
         )
         mock_population["detection_efficiency"] = (
             self.detection_model.detection_efficiency(mock_population)
@@ -489,7 +607,15 @@ class PopulationModel:
                 mock_population["detection_efficiency"] > 0
             ]
 
-        mock_population = self._format_results(mock_population, result_format)
+        additional_columns = list(additional_columns) if additional_columns else []
+        mock_population = self._format_results(
+            mock_population,
+            result_format,
+            additional_columns=additional_columns + ["detection_efficiency"],
+        )
+
+        if add_planet_category:
+            mock_population = self.add_planet_category(mock_population)
 
         return mock_population.reset_index(drop=True)
 
@@ -497,6 +623,7 @@ class PopulationModel:
         self,
         dataframe: pd.DataFrame,
         result_format: str,
+        additional_columns: Optional[str | list[str]] = None,
     ) -> pd.DataFrame:
         """
         Format the results of the mock population or observation
@@ -510,14 +637,20 @@ class PopulationModel:
             The format of the result DataFrame. Must be one of
             'minimal', 'reconstructable', or 'full'.
             The available formats are:
-                - 'minimal': contains the planet radius, mass,
+                - 'minimal': contains the target id, planet radius, mass,
                              semi-major axis, and detection efficiency.
                 - 'reconstructable': contains the 'minimal' columns,
                                      plus the cos_i, system_id,
                                      planet_id, and gaiaID_DR3. Can be
-                                     used to reconstruct all columns.
+                                     used to reconstruct all columns. The
+                                     system_id and planet_id are the indices
+                                     of the system and planet in the NGPPS
+                                     population.
                 - 'full': contains all columns in the mock population,
                           including the stellar parameters.
+        additional_columns : Optional[str | list[str]], optional
+            A list of additional columns to include in the result DataFrame,
+            by default None.
 
         Returns
         -------
@@ -527,31 +660,36 @@ class PopulationModel:
 
         """
         if result_format == "minimal":
-            dataframe = dataframe[
-                [
-                    "R_planet",
-                    "M_planet",
-                    "a",
-                    "detection_efficiency",
-                ]
+            columns = [
+                "TargetID",
+                "R_planet",
+                "M_planet",
+                "a",
             ]
+
         elif result_format == "reconstructable":
-            dataframe = dataframe[
-                [
-                    "R_planet",
-                    "M_planet",
-                    "a",
-                    "detection_efficiency",
-                    "cos_i",
-                    "system_id",
-                    "planet_id",
-                    "gaiaID_DR3",
-                ]
+            columns = [
+                "TargetID",
+                "R_planet",
+                "M_planet",
+                "a",
+                "cos_i",
+                "system_id",
+                "planet_id",
+                "gaiaID_DR3",
             ]
         elif result_format == "full":
-            pass
+            columns = dataframe.columns
         else:
             raise ValueError(
                 "return_full must be one of 'minimal', 'reconstructable', or 'full'."
             )
-        return dataframe
+
+        if additional_columns:
+            additional_columns = (
+                [additional_columns]
+                if isinstance(additional_columns, str)
+                else additional_columns
+            )
+            columns += additional_columns
+        return dataframe[columns]
