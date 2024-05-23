@@ -105,7 +105,7 @@ class PopulationModel:
         ngpps_mapping = {
             10: "ng96",
             20: "ng74",
-            50: "ng075",
+            50: "ng75",
             100: "ng76",
         }
 
@@ -145,7 +145,10 @@ class PopulationModel:
         self.system_populations, self.system_num_planets = self.group_systems()
 
         # create planetary system metallicity attribute(s)
-        self.system_metallicity = self.get_system_metallicities(**kwargs)
+        system_metallicity = self.get_system_metallicities(**kwargs)
+        self.system_metallicity = system_metallicity.loc[
+            self.ngpps_population["system_id"].unique() - 1
+        ]  # only use the ones in ngpps_population
 
         # placeholder attributes for probability caching
         self.log_probs: Optional[np.ndarray] = None
@@ -282,6 +285,7 @@ class PopulationModel:
             probabilities are returned instead.
 
         """
+
         # Efficiently compute the probability matrix using broadcasting
         diff_matrix = (
             self.stellar_population["[Fe/H]"].to_numpy(dtype=np.float32)[:, None]
@@ -314,6 +318,7 @@ class PopulationModel:
         self,
         decay_parameter: float = 10 * np.log(10),
         correct_for_initial_distribution: bool = True,
+        get_random_indices: bool = False,
     ) -> np.ndarray:
         """
         Assign a random planetary system to each star in the stellar
@@ -340,6 +345,10 @@ class PopulationModel:
             metallicity distribution of the NGPPS systems, which
             is given by a normal distribution with mean -0.02 and
             standard deviation 0.22 (NGPPS paper 2), by default True.
+        get_random_indices : bool, optional
+            If True, the random indices used for assigning the systems are
+            returned instead of the system ids, by default False.
+
         Returns
         -------
         np.ndarray
@@ -369,13 +378,16 @@ class PopulationModel:
             np.random.rand(log_cumulative_probabilities.shape[0], 1)
         )
 
-        # Use broadcasting to compare random values with cumulative probabilities
+        # use broadcasting to compare random values with cumulative probabilities
         random_indices = (log_random_values < log_cumulative_probabilities).argmax(
             axis=1
         )
 
-        # system ids are between 1 and 1000, so add 1 to the indices
-        system_ids = random_indices + 1
+        if get_random_indices:
+            return random_indices
+
+        # get corresponding system ids
+        system_ids = self.ngpps_population["system_id"][random_indices].to_numpy()
         return system_ids
 
     def add_planet_category(
@@ -516,15 +528,18 @@ class PopulationModel:
         """
 
         # assign random systems to stars
-        system_ids = self.assign_random_systems(decay_parameter=decay_parameter)
+        rand_systems = self.assign_random_systems(
+            decay_parameter=decay_parameter,
+            get_random_indices=True,
+        )
 
         # assign random inlcination angles (cos(i) is uniform between 0 and 1)
         random_cos_i = np.random.rand(self.stellar_population.shape[0])
 
         # get the systems corresponding to the assigned system ids
         # (random indices differ by 1 from system ids)
-        systems = pd.concat([self.system_populations[ind - 1] for ind in system_ids])
-        num_planets = [self.system_num_planets[ind - 1] for ind in system_ids]
+        systems = pd.concat([self.system_populations[ind] for ind in rand_systems])
+        num_planets = [self.system_num_planets[ind] for ind in rand_systems]
 
         stellar_properties = self.stellar_population.copy()
         stellar_properties["cos_i"] = random_cos_i

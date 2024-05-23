@@ -1,5 +1,3 @@
-from typing import Optional
-
 import pandas as pd
 from pandas._typing import AggFuncTypeBase
 
@@ -17,42 +15,10 @@ class PlanetPopulationMetrics:
 
         """
 
-    def get_subpopulation(
-        self,
-        planet_population: pd.DataFrame,
-        population: Optional[str] = None,
-    ) -> pd.DataFrame:
-        """
-        Filter the data by population. Column
-        "Population" must be present in the data.
-
-        Parameters
-        ----------
-        planet_population : pd.DataFrame
-            The planet population data, must contain columns "TargetID",
-            "Planet Category", and optionally "Population",
-            if filtering by population is desired.
-        population : Optional[str], optional
-            Name of the population to filter by,
-            by default None
-        remove_dwarfs : bool, optional
-            Whether to remove the "Dwarf" category from the results,
-            by default True.
-
-        Returns
-        -------
-        pd.DataFrame
-            Subset of the data filtered by population.
-        """
-        if population:
-            return planet_population[planet_population["Population"] == population]
-        else:
-            return planet_population
-
     def calculate_number_of_planets(
         self,
         planet_population: pd.DataFrame,
-        population: Optional[str] = None,
+        by_population: bool = False,
         remove_dwarfs: bool = True,
     ) -> pd.Series:
         """
@@ -64,12 +30,10 @@ class PlanetPopulationMetrics:
             The planet population data, must contain columns "TargetID",
             "Planet Category", and optionally "Population",
             if filtering by population is desired.
-        number_of_systems : int
-            The number of systems for which the population was
-            determined.
-        population : Optional[str], optional
-            Name of the population to filter by,
-            by default None
+        by_population : bool, optional
+            If True, calculate the number of planets for each category
+            within each population. In this case, the "Population" column
+            must be present in the DataFrame, by default False.
         remove_dwarfs : bool, optional
             Whether to remove the "Dwarf" category from the results,
             by default True.
@@ -79,22 +43,23 @@ class PlanetPopulationMetrics:
         pd.Series
             Series containing the number of planets for each category.
         """
-        planet_pop = self.get_subpopulation(
-            planet_population,
-            population,
-        )
-        num_planets = planet_pop["Planet Category"].value_counts()
+        if by_population:
+            num_planets = planet_population.groupby(
+                ["Population", "Planet Category"]
+            ).size()
+        else:
+            num_planets = planet_population.groupby("Planet Category").size()
 
         if remove_dwarfs and "Dwarf" in num_planets.index:
             num_planets = num_planets.drop(index="Dwarf")
-
+        assert isinstance(num_planets, pd.Series)
         return num_planets
 
     def calculate_fraction_of_systems_with_planet(
         self,
         planet_population: pd.DataFrame,
-        number_of_systems: int,
-        population: Optional[str] = None,
+        number_of_systems: int | dict[str, int],
+        by_population: bool = False,
         remove_dwarfs: bool = True,
     ) -> pd.Series:
         """
@@ -107,11 +72,16 @@ class PlanetPopulationMetrics:
             The planet population data, must contain columns "TargetID",
             "Planet Category", and optionally "Population",
             if filtering by population is desired.
-        number_of_systems : int
+        number_of_systems : int | dict[str, int]
             The number of systems for which the population was
-        population : Optional[str], optional
-            Name of the population to filter by,
-            by default None
+            determined. If by_population is True, this should be a
+            dictionary with the population name as key and the number
+            of systems as value.
+        by_population : bool, optional
+            If True, calculate the fraction of systems with at least one
+            planet for each category within each population. In this case,
+            the "Population" column must be present in the DataFrame,
+            by default False.
         remove_dwarfs : bool, optional
             Whether to remove the "Dwarf" category from the results,
             by default True.
@@ -119,17 +89,41 @@ class PlanetPopulationMetrics:
         Returns
         -------
         pd.Series
-            Series containing the fraction of systems with at least one
-            planet for each category.
+            Series containing the fraction of systems with at least one planet
+            for each category.
         """
-        planet_pop = self.get_subpopulation(
-            planet_population,
-            population,
-        )
-        systems_with_planet_type = planet_pop.groupby("Planet Category")[
-            "TargetID"
-        ].nunique()
-        fraction_systems_with_planet = systems_with_planet_type / number_of_systems
+        if by_population and not isinstance(number_of_systems, dict):
+            raise ValueError(
+                "If by_population is True, number_of_systems must be a dictionary, "
+                "with the population name as key and the number of systems as value."
+            )
+        if not by_population and not isinstance(number_of_systems, int):
+            raise ValueError(
+                "If by_population is False, number_of_systems must be an integer."
+            )
+
+        if by_population:
+            systems_with_planet_type = planet_population.groupby(
+                ["Population", "Planet Category"]
+            )["TargetID"].nunique()
+        else:
+            systems_with_planet_type = planet_population.groupby("Planet Category")[
+                "TargetID"
+            ].nunique()
+
+        if not by_population:
+            assert isinstance(number_of_systems, int)
+            fraction_systems_with_planet = systems_with_planet_type / number_of_systems
+        else:
+            assert isinstance(number_of_systems, dict)
+            fraction_systems_with_planet = systems_with_planet_type.copy().astype(float)
+            for population in fraction_systems_with_planet.index.get_level_values(
+                "Population"
+            ).unique():
+                fraction_systems_with_planet[population] = (
+                    fraction_systems_with_planet[population]
+                    / number_of_systems[population]
+                )
 
         if remove_dwarfs and "Dwarf" in fraction_systems_with_planet.index:
             fraction_systems_with_planet = fraction_systems_with_planet.drop(
@@ -141,8 +135,8 @@ class PlanetPopulationMetrics:
     def calculate_occurrence_rate(
         self,
         planet_population: pd.DataFrame,
-        number_of_systems: int,
-        population: Optional[str] = None,
+        number_of_systems: int | dict[str, int],
+        by_population: bool = False,
         remove_dwarfs: bool = True,
     ) -> pd.Series:
         """
@@ -155,28 +149,52 @@ class PlanetPopulationMetrics:
             The planet population data, must contain columns "TargetID",
             "Planet Category", and optionally "Population",
             if filtering by population is desired.
-        number_of_systems : int
+        number_of_systems : int | dict[str, int]
             The number of systems for which the population was
-            determined.
-        population : Optional[str], optional
-            Name of the population to filter by,
-            by default None
+            determined. If by_population is True, this should be a
+            dictionary with the population name as key and the number
+            of systems as value.
+        by_population : bool, optional
+            If True, calculate the occurrence rate for each category
+            within each population. In this case, the "Population" column
+            must be present in the DataFrame, by default False.
         remove_dwarfs : bool, optional
             Whether to remove the "Dwarf" category from the results,
             by default True.
 
         Returns
         -------
-        pd.Series
-            Series containing the occurrence rate for each category.
+        pd.DataFrame
+            DataFrame containing the occurrence rate for each category.
+
         """
+        if by_population and not isinstance(number_of_systems, dict):
+            raise ValueError(
+                "If by_population is True, number_of_systems must be a dictionary, "
+                "with the population name as key and the number of systems as value."
+            )
+        if not by_population and not isinstance(number_of_systems, int):
+            raise ValueError(
+                "If by_population is False, number_of_systems must be an integer."
+            )
 
         number_of_planets = self.calculate_number_of_planets(
             planet_population,
-            population,
-            remove_dwarfs,
+            by_population=by_population,
+            remove_dwarfs=remove_dwarfs,
         )
-        occurrence_rate = number_of_planets / number_of_systems
+        if not by_population:
+            assert isinstance(number_of_systems, int)
+            occurrence_rate = number_of_planets / number_of_systems
+        else:
+            assert isinstance(number_of_systems, dict)
+            occurrence_rate = number_of_planets.copy().astype(float)
+            for population in occurrence_rate.index.get_level_values(
+                "Population"
+            ).unique():
+                occurrence_rate[population] = (
+                    number_of_planets[population] / number_of_systems[population]
+                )
 
         if remove_dwarfs and "Dwarf" in occurrence_rate.index:
             occurrence_rate = occurrence_rate.drop(index="Dwarf")
@@ -186,7 +204,7 @@ class PlanetPopulationMetrics:
     def calculate_multiplicity(
         self,
         planet_population: pd.DataFrame,
-        population: Optional[str] = None,
+        by_population: bool = False,
         remove_dwarfs: bool = True,
     ) -> pd.Series:
         """
@@ -212,13 +230,23 @@ class PlanetPopulationMetrics:
             Series containing the multiplicity for each category.
         """
 
-        planet_pop = self.get_subpopulation(
+        number_of_planets = self.calculate_number_of_planets(
             planet_population,
-            population,
+            by_population,
+            remove_dwarfs,
         )
-        multiplicity = planet_pop.groupby("Planet Category").apply(
-            lambda x: len(x) / x["TargetID"].nunique()
-        )
+
+        if not by_population:
+            number_of_containing_systems = planet_population.groupby("Planet Category")[
+                "TargetID"
+            ].nunique()
+        else:
+            number_of_containing_systems = planet_population.groupby(
+                ["Population", "Planet Category"]
+            )["TargetID"].nunique()
+
+        multiplicity = number_of_planets / number_of_containing_systems
+
         if remove_dwarfs and "Dwarf" in multiplicity.index:
             multiplicity = multiplicity.drop(index="Dwarf")
         return multiplicity
@@ -226,8 +254,8 @@ class PlanetPopulationMetrics:
     def calculate_metrics(
         self,
         planet_population: pd.DataFrame,
-        number_of_systems: int,
-        population: Optional[str] = None,
+        number_of_systems: int | dict[str, int],
+        by_population: bool = False,
         remove_dwarfs: bool = True,
     ) -> pd.DataFrame:
         """
@@ -243,18 +271,18 @@ class PlanetPopulationMetrics:
             The planet population data, must contain columns "TargetID",
             "Planet Category", and optionally "Population",
             if filtering by population is desired.
-        number_of_systems : int
+        number_of_systems : int | dict[str, int]
             The number of systems for which the population was
-            determined.
-        population : Optional[str], optional
-            Name of the population to filter by,
-            by default None
+            determined. If by_population is True, this should be a
+            dictionary with the population name as key and the number
+            of systems as value.
+        by_population : bool, optional
+            If True, calculate the metrics for each category within
+            each population. In this case, the "Population" column
+            must be present in the DataFrame, by default False.
         remove_dwarfs : bool, optional
             Whether to remove the "Dwarf" category from the results,
             by default True.
-        decimals : int, optional
-            Number of decimals to round the (float) results to,
-            by default 2.
 
         Returns
         -------
@@ -264,24 +292,24 @@ class PlanetPopulationMetrics:
 
         num_planets = self.calculate_number_of_planets(
             planet_population,
-            population,
+            by_population,
             remove_dwarfs,
         )
         fraction_systems_with_planet = self.calculate_fraction_of_systems_with_planet(
             planet_population,
             number_of_systems,
-            population,
+            by_population,
             remove_dwarfs,
         )
         occurrence_rate = self.calculate_occurrence_rate(
             planet_population,
             number_of_systems,
-            population,
+            by_population,
             remove_dwarfs,
         )
         multiplicity = self.calculate_multiplicity(
             planet_population,
-            population,
+            by_population,
             remove_dwarfs,
         )
 
