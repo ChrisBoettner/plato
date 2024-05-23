@@ -1,10 +1,9 @@
-from typing import Any, Optional, Callable
+from typing import Any, Callable, Optional
 
 import numpy as np
 import pandas as pd
-from methodtools import lru_cache
-from scipy.stats import norm
 from astropy import units as u
+from scipy.stats import norm
 
 from plato.instrument.detection import DetectionModel
 
@@ -148,6 +147,12 @@ class PopulationModel:
         # create planetary system metallicity attribute(s)
         self.system_metallicity = self.get_system_metallicities(**kwargs)
 
+        # placeholder attributes for probability caching
+        self.log_probs: Optional[np.ndarray] = None
+        self.log_cum_probs: Optional[np.ndarray] = None
+        self.decay_parameter_check: Optional[float] = None
+        self.correct_for_initial_check: Optional[bool] = None
+
     def group_systems(
         self,
     ) -> tuple[list[pd.DataFrame], list[int]]:
@@ -234,27 +239,31 @@ class PopulationModel:
         else:
             return metadata[["system_id", "[Fe/H]"]]
 
-    @lru_cache(maxsize=1)
-    def calculate_probabilities(
+    def calculate_log_probabilities(
         self,
-        decay_parameter: float = 10,
+        decay_parameter: float = 10 * np.log(10),
         correct_for_initial_distribution: bool = True,
         return_cumulative_probabilities: bool = False,
     ) -> np.ndarray:
         """
-        Calculate the probability system assigment probabilities for each
-        star in the stellar population. The probability distribution are
+        Calculate the log probability (to base e) system assigment probabilities
+        for each star in the stellar population. The probability distribution are
         calculated for all stars in the stellar population, based on the
         metallicities of the star and NGPPS systems.
+
+        The probabilties are calculated using an exponential distribution, as
+        log_e p = -decay_parameter * |[Fe/H]_star - [Fe/H]_system|, where
+        decay_parameter controls the rate at which the probability decreases
+        with metallicity difference.
 
         Parameters
         ----------
         decay_parameter : float
             The rate parameter of the exponential distribution
             used to calculate the probabilities of assigning a
-            system to a star. With a value of 10, the probability
-            of assigning a system drops by a factor of 10 for each
-            0.1 dex difference in metallicity.
+            system to a star. With a value of 10 * log_e(10), the
+            probability of assigning a system drops by a factor of
+            10 for each 0.1 dex difference in metallicity.
         correct_for_initial_distribution : bool, optional
             Whether to correct the probabilities for the initial
             metallicity distribution of the NGPPS systems, which
@@ -267,33 +276,43 @@ class PopulationModel:
         Returns
         -------
         np.ndarray
-            A 2D array containing the probabilities of assigning
-            any system to any star in the stellar population. If
-            return_cumulative_probabilities is True, the cumulative
+            A 2D array containing the log probabilities (to base e) of
+            assigningany system to any star in the stellar population. If
+            return_cumulative_probabilities is True, the log cumulative
             probabilities are returned instead.
 
         """
         # Efficiently compute the probability matrix using broadcasting
         diff_matrix = (
-            self.stellar_population["[Fe/H]"].to_numpy()[:, None]
-            - self.system_metallicity["[Fe/H]"].to_numpy()[None, :]
+            self.stellar_population["[Fe/H]"].to_numpy(dtype=np.float32)[:, None]
+            - self.system_metallicity["[Fe/H]"].to_numpy(dtype=np.float32)[None, :]
         )
-        probabilities = np.power(10, -float(decay_parameter) * np.abs(diff_matrix))
+
+        log_probabilities = -decay_parameter * np.abs(diff_matrix)
+
         if correct_for_initial_distribution:
             original_distribution = norm(loc=-0.02, scale=0.22)
-            probabilities /= original_distribution.pdf(  # type: ignore
+            log_probabilities -= original_distribution.logpdf(  # type: ignore
                 self.system_metallicity["[Fe/H]"]
             )
 
-        probabilities /= probabilities.sum(axis=1, keepdims=True)  # Normalize row-wise
+        # normalise the probabilities
+        log_probabilities -= np.logaddexp.reduce(
+            log_probabilities, axis=1, keepdims=True
+        )
 
         if return_cumulative_probabilities:
-            return np.cumsum(probabilities, axis=1)
-        return probabilities
+            cumulative_log_probabilities = np.ufunc.accumulate(
+                np.logaddexp,
+                log_probabilities,
+                axis=1,
+            )
+            return cumulative_log_probabilities
+        return log_probabilities
 
     def assign_random_systems(
         self,
-        decay_parameter: float = 10,
+        decay_parameter: float = 10 * np.log(10),
         correct_for_initial_distribution: bool = True,
     ) -> np.ndarray:
         """
@@ -313,9 +332,9 @@ class PopulationModel:
         decay_parameter : float
             The rate parameter of the exponential distribution
             used to calculate the probabilities of assigning a
-            system to a star, by default 10. With a value of 10,
-            the probability of assigning a system drops by a factor
-            of 10 for each 0.1 dex difference in metallicity.
+            system to a star. With a value of 10 * log_e(10), the
+            probability of assigning a system drops by a factor of
+            10 for each 0.1 dex difference in metallicity.
         correct_for_initial_distribution : bool, optional
             Whether to correct the probabilities for the initial
             metallicity distribution of the NGPPS systems, which
@@ -327,17 +346,33 @@ class PopulationModel:
             A random sample of system ids assigned to each star in
             the stellar population.
         """
-        cumulative_probabilities = self.calculate_probabilities(
-            decay_parameter=decay_parameter,
-            correct_for_initial_distribution=correct_for_initial_distribution,
-            return_cumulative_probabilities=True,
-        )  # type: ignore
+        # calculate the log probabilities with caching
+        if (
+            self.log_cum_probs is None
+            and self.decay_parameter_check != decay_parameter
+            and self.correct_for_initial_check != correct_for_initial_distribution
+        ):
+            log_cumulative_probabilities = self.calculate_log_probabilities(
+                decay_parameter=decay_parameter,
+                correct_for_initial_distribution=correct_for_initial_distribution,
+                return_cumulative_probabilities=True,
+            )  # type: ignore
+            self.log_cum_probs = log_cumulative_probabilities
+            self.decay_parameter_check = decay_parameter
+            self.correct_for_initial_check = correct_for_initial_distribution
+        else:
+            assert isinstance(self.log_cum_probs, np.ndarray)
+            log_cumulative_probabilities = self.log_cum_probs
 
         # generate random values for each row
-        random_values = np.random.rand(cumulative_probabilities.shape[0], 1)
+        log_random_values = np.log(
+            np.random.rand(log_cumulative_probabilities.shape[0], 1)
+        )
 
         # Use broadcasting to compare random values with cumulative probabilities
-        random_indices = (random_values < cumulative_probabilities).argmax(axis=1)
+        random_indices = (log_random_values < log_cumulative_probabilities).argmax(
+            axis=1
+        )
 
         # system ids are between 1 and 1000, so add 1 to the indices
         system_ids = random_indices + 1
@@ -418,7 +453,7 @@ class PopulationModel:
 
     def create_mock_population(
         self,
-        decay_parameter: float = 10,
+        decay_parameter: float = 10 * np.log(10),
         metallicity_limit: Optional[float] = None,
         add_planet_category: bool = True,
         result_format: str = "minimal",
@@ -445,9 +480,9 @@ class PopulationModel:
         decay_parameter : float
             The rate parameter of the exponential distribution
             used to calculate the probabilities of assigning a
-            system to a star, by default 10. With a value of 10,
-            the probability of assigning a system drops by a factor
-            of 10 for each 0.1 dex difference in metallicity.
+            system to a star. With a value of 10 * log_e(10), the
+            probability of assigning a system drops by a factor of
+            10 for each 0.1 dex difference in metallicity.
         metallicity_limit : Optional[float], optional
             The minimum metallicity of the star to be included in
             the mock population. If None, no limit is
@@ -538,7 +573,7 @@ class PopulationModel:
 
     def create_mock_observation(
         self,
-        decay_parameter: float = 10,
+        decay_parameter: float = 10 * np.log(10),
         metallicity_limit: Optional[float] = None,
         add_planet_category: bool = False,
         remove_zeros: bool = True,
@@ -556,9 +591,9 @@ class PopulationModel:
         decay_parameter : float
             The rate parameter of the exponential distribution
             used to calculate the probabilities of assigning a
-            system to a star, by default 10. With a value of 10,
-            the probability of assigning a system drops by a factor
-            of 10 for each 0.1 dex difference in metallicity.
+            system to a star. With a value of 10 * log_e(10), the
+            probability of assigning a system drops by a factor of
+            10 for each 0.1 dex difference in metallicity.
         metallicity_limit : Optional[float], optional
             The minimum metallicity of the star to be included in
             the mock population. If None, no limit is

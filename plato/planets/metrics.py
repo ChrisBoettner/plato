@@ -1,5 +1,7 @@
-import pandas as pd
 from typing import Optional
+
+import pandas as pd
+from pandas._typing import AggFuncTypeBase
 
 
 class PlanetPopulationMetrics:
@@ -250,6 +252,9 @@ class PlanetPopulationMetrics:
         remove_dwarfs : bool, optional
             Whether to remove the "Dwarf" category from the results,
             by default True.
+        decimals : int, optional
+            Number of decimals to round the (float) results to,
+            by default 2.
 
         Returns
         -------
@@ -291,64 +296,45 @@ class PlanetPopulationMetrics:
 
         return metrics
 
-    def calculate_agg_metrics(
+    def calculate_metrics_stats(
         self,
-        planet_populations: list[pd.DataFrame],
-        number_of_systems: int,
-        population: Optional[str] = None,
-        remove_dwarfs: bool = True,
+        metric_dataframes: list[pd.DataFrame],
+        grouping_column: str | list[str],
     ) -> pd.DataFrame:
         """
         Calculate the statistics of the metrics for a list
-        of planet populations. Specifically, calculate the
+        of metric dataframes. Specifically, calculate the
         median, 16th, and 84th percentiles of the metrics.
 
         Parameters
         ----------
-        planet_populations : list[pd.DataFrame]
-            List of planet populations, each containing columns
-            "TargetID", "Planet Category", and optionally "Population",
-            if filtering by population is desired.
-        number_of_systems : int
-            The number of systems for which the population was
-            determined.
-        population : Optional[str], optional
-            Name of the population to filter by,
-            by default None
-        remove_dwarfs : bool, optional
-            Whether to remove the "Dwarf" category from the results,
-            by default True.
-
+        metric_dataframes : list[pd.DataFrame]
+            List of DataFrames containing the metrics for each
+            planet population, calculated using the calculate_metrics
+            method.
+        grouping_column : str | list[str]
+            Column(s) to group the results by.
         Returns
         -------
         pd.DataFrame
             DataFrame containing the statistics of the metrics.
 
         """
-        results: list | pd.DataFrame = []
-        for planet_population in planet_populations:
-            results.append(
-                self.calculate_metrics(
-                    planet_population,
-                    number_of_systems,
-                    population,
-                    remove_dwarfs,
-                )
-            )
+        dataframe = pd.concat(metric_dataframes)
 
-        results = pd.concat(results)
+        agg_functions: list[AggFuncTypeBase] = [
+            lambda x: x.quantile(0.50),
+            lambda x: x.quantile(0.50) - x.quantile(0.16),
+            lambda x: x.quantile(0.84) - x.quantile(0.50),
+        ]
+        rename_dict = {
+            "<lambda_0>": "Median",
+            "<lambda_1>": "16th",
+            "<lambda_2>": "84th",
+        }
 
-        quantiles = [0.5, 0.16, 0.84]
-        agg_results = results.groupby("Planet Category").agg(
-            [lambda x: x.quantile(q) for q in quantiles]
-        )
+        agg_results = dataframe.groupby(grouping_column).agg(agg_functions)
 
-        agg_results.rename(
-            {
-                "<lambda_0>": "Median",
-                "<lambda_1>": "16th",
-                "<lambda_2>": "84th",
-            },
-            inplace=True,
-        )
+        agg_results = agg_results.rename(columns=rename_dict)
+
         return agg_results
