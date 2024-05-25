@@ -1,3 +1,6 @@
+from typing import Any, Optional
+
+import numpy as np
 import pandas as pd
 from pandas._typing import AggFuncTypeBase
 
@@ -326,8 +329,10 @@ class PlanetPopulationMetrics:
 
     def calculate_metrics_stats(
         self,
-        metric_dataframes: list[pd.DataFrame],
+        metric_dataframes: list[pd.DataFrame | pd.Series],
         grouping_column: str | list[str],
+        format_uncertainties: bool = False,
+        **kwargs: Any,
     ) -> pd.DataFrame:
         """
         Calculate the statistics of the metrics for a list
@@ -336,12 +341,19 @@ class PlanetPopulationMetrics:
 
         Parameters
         ----------
-        metric_dataframes : list[pd.DataFrame]
+        metric_dataframes : list[pd.DataFrame | pd.Series]
             List of DataFrames containing the metrics for each
             planet population, calculated using the calculate_metrics
             method.
         grouping_column : str | list[str]
             Column(s) to group the results by.
+        format_uncertainties : bool, optional
+            Whether to format the uncertainties in the results
+            dataframe for latex, by default False.
+        **kwargs : Any
+            Additional keyword arguments passed to the format_uncertainties
+            method.
+
         Returns
         -------
         pd.DataFrame
@@ -365,4 +377,89 @@ class PlanetPopulationMetrics:
 
         agg_results = agg_results.rename(columns=rename_dict)
 
+        if format_uncertainties:
+            agg_results = self.format_uncertainties(agg_results, **kwargs)
+
         return agg_results
+
+    def format_uncertainties(
+        self,
+        dataframe: pd.DataFrame,
+        median_col: str = "Median",
+        upper_col: str = "84th",
+        lower_col: str = "16th",
+        new_col_name: str = "Formatted",
+        round_decimals: Optional[int] = None,
+        to_int: bool = False,
+    ) -> pd.DataFrame:
+        """
+        Format the uncertainties in the results dataframe for latex.
+        This method takes a DataFrame containing the median, 16th, and 84th
+        percentiles of the metrics, and formats the uncertainties in a
+        latex-friendly way. The formatted uncertainties are stored in a new
+        column in the DataFrame. The uncertainties are formatted as
+        $median^{+upper}_{-lower}$.
+        The dataframe can have a single-level or multi-level column structure.
+        In the latter case, the formatting is applied to each top-level column.
+
+
+        Parameters
+        ----------
+        dataframe : pd.DataFrame
+            DataFrame containing the data and uncertainies.
+        median_col : str, optional
+            Column name of the central values, by default "Median".
+        upper_col : str, optional
+            Column name of the upper uncertainties, by default "84th".
+        lower_col : str, optional
+            Column name of the lower uncertainties, by default "16th".
+        new_col_name : str, optional
+            Name of the new column to store the formatted uncertainties,
+            by default "Formatted".
+        round_decimals : Optional[int], optional
+            Number of decimals to round the values to, by default None.
+        to_int : bool, optional
+            Whether to convert the values to integers, by default False.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame containing the formatted uncertainties.
+        """
+        dataframe = dataframe.copy()
+        if isinstance(round_decimals, int):
+            dataframe = dataframe.round(round_decimals)
+        elif round_decimals == "ceil":
+            dataframe = np.ceil(dataframe)  # type: ignore
+        elif round_decimals == "floor":
+            dataframe = np.floor(dataframe)  # type: ignore
+        elif round_decimals is not None:
+            pass
+        else:
+            raise ValueError("round_decimals must be an integer, 'ceil', or 'floor'")
+
+        def apply_formatting(df: pd.DataFrame) -> pd.DataFrame:
+            df[new_col_name] = df.apply(
+                lambda row: (
+                    f"${row[median_col]}"
+                    f"^{{+{row[upper_col]}}}_{{-{row[lower_col]}}}$"
+                ),
+                axis=1,
+            )
+            return df.drop(columns=[median_col, upper_col, lower_col])
+
+        if isinstance(dataframe.columns, pd.MultiIndex):
+            # create a dictionary to hold formatted DataFrames for each top level column
+            formatted_dfs = {
+                top_level: apply_formatting(dataframe[top_level])
+                for top_level in dataframe.columns.levels[0]
+            }
+            # Concatenate the formatted DataFrames along the columns axis
+            dataframe = pd.concat(formatted_dfs, axis=1)
+            # remove multiindexing
+            dataframe.columns = dataframe.columns.droplevel(1)
+        else:
+            # Apply formatting for single-level column structure
+            dataframe = apply_formatting(dataframe)
+
+        return dataframe
