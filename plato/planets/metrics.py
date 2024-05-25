@@ -438,6 +438,8 @@ class PlanetPopulationMetrics:
         else:
             raise ValueError("round_decimals must be an integer, 'ceil', or 'floor'")
 
+        dataframe = dataframe.astype(int) if to_int else dataframe
+
         def apply_formatting(df: pd.DataFrame) -> pd.DataFrame:
             df[new_col_name] = df.apply(
                 lambda row: (
