@@ -506,12 +506,15 @@ class PopulationModel:
             The format of the result DataFrame. Must be one of
             'minimal', 'reconstructable', or 'full'.
             The available formats are:
-                - 'minimal': contains the planet radius, mass,
-                             semi-major axis, and detection efficiency.
+                - 'minimal': contains the planet radius, mass and orbital period,
+                             and the TargetID.
                 - 'reconstructable': contains the 'minimal' columns,
-                                     plus the cos_i, system_id,
+                                     plus cos_i, system_id,
                                      planet_id, and gaiaID_DR3. Can be
-                                     used to reconstruct all columns.
+                                     used to reconstruct all columns. The
+                                     system_id and planet_id are the indices
+                                     of the system and planet in the NGPPS
+                                     population.
                 - 'full': contains all columns in the mock population,
                           including the stellar parameters,
             by default "full".
@@ -575,6 +578,11 @@ class PopulationModel:
         if metallicity_limit:
             systems = systems[systems["[Fe/H]"] > metallicity_limit]
 
+        systems["Porb"] = self.detection_model.transit_model.calculate_orbital_period(
+            a=systems["a"].to_numpy() * u.AU,
+            m_star=systems["M_star"].to_numpy() * u.Msun,
+        ).to(u.day)
+
         systems = self._format_results(
             systems,
             result_format,
@@ -589,7 +597,10 @@ class PopulationModel:
     def create_mock_observation(
         self,
         decay_parameter: float = 10 * np.log(10),
+        mass_cut: Optional[float] = 0.5,
         metallicity_limit: Optional[float] = None,
+        draw_sample: bool = True,
+        add_detection_efficiency: bool = False,
         add_planet_category: bool = False,
         remove_zeros: bool = True,
         result_format: str = "minimal",
@@ -599,7 +610,10 @@ class PopulationModel:
         Create a mock observation of the NGPPS population.
         First creates a mock population using the create_mock_population
         method, then calculates the detection efficiency of each planet
-        in the mock population using the detection model.
+        in the mock population using the detection model. If draw_sample
+        is True, a random sample of planets is drawn from the mock
+        population, based on the detection efficiency of each planet.
+
 
         Parameters
         ----------
@@ -609,10 +623,21 @@ class PopulationModel:
             system to a star. With a value of 10 * log_e(10), the
             probability of assigning a system drops by a factor of
             10 for each 0.1 dex difference in metallicity.
+        mass_cut : Optional[float], optional
+            The minimum mass of the planet to be included in the
+            mock population. If None, no limit is applied, by default 0.5.
         metallicity_limit : Optional[float], optional
             The minimum metallicity of the star to be included in
             the mock population. If None, no limit is
             applied, by default None.
+        draw_sample : bool, optional
+            If True, a random sample of planets is drawn from the
+            mock population, based on the detection efficiency of
+            each planet, by default False.
+        add_detection_efficiency : bool, optional
+            If True, a column containing the detection efficiency
+            of each planet is added to the mock population, by
+            default False.
         add_planet_category : bool, optional
             If True, a column containing the planet category is
             added to the mock population, by default False.
@@ -623,12 +648,15 @@ class PopulationModel:
             The format of the result DataFrame. Must be one of
             'minimal', 'reconstructable', or 'full'.
             The available formats are:
-                - 'minimal': contains the planet radius, mass,
-                             semi-major axis, and detection efficiency.
+                - 'minimal': contains the planet radius, mass and orbital period,
+                             and the TargetID.
                 - 'reconstructable': contains the 'minimal' columns,
-                                     plus the cos_i, system_id,
+                                     plus cos_i, system_id,
                                      planet_id, and gaiaID_DR3. Can be
-                                     used to reconstruct all columns.
+                                     used to reconstruct all columns. The
+                                     system_id and planet_id are the indices
+                                     of the system and planet in the NGPPS
+                                     population.
                 - 'full': contains all columns in the mock population,
                           including the stellar parameters,
             by default "minimal".
@@ -648,6 +676,10 @@ class PopulationModel:
             metallicity_limit=metallicity_limit,
             result_format="full",
         )
+
+        if mass_cut:
+            mock_population = mock_population[mock_population["M_planet"] > mass_cut]
+
         mock_population["detection_efficiency"] = (
             self.detection_model.detection_efficiency(mock_population)
         )
@@ -657,11 +689,25 @@ class PopulationModel:
                 mock_population["detection_efficiency"] > 0
             ]
 
-        additional_columns = list(additional_columns) if additional_columns else []
+        if draw_sample:
+            # draw a random sample of planets based on the detection efficiency
+            random_val = np.random.rand(mock_population.shape[0])
+            mock_population = mock_population[
+                random_val <= mock_population["detection_efficiency"]
+            ]
+
+        additional_columns = (
+            [additional_columns]
+            if isinstance(additional_columns, str)
+            else (additional_columns or [])
+        )
+        if add_detection_efficiency:
+            additional_columns.append("detection_efficiency")
+
         mock_population = self._format_results(
             mock_population,
             result_format,
-            additional_columns=additional_columns + ["detection_efficiency"],
+            additional_columns=additional_columns,
         )
 
         if add_planet_category:
@@ -687,10 +733,10 @@ class PopulationModel:
             The format of the result DataFrame. Must be one of
             'minimal', 'reconstructable', or 'full'.
             The available formats are:
-                - 'minimal': contains the target id, planet radius, mass,
-                             semi-major axis, and detection efficiency.
+                - 'minimal': contains the planet radius, mass and orbital period,
+                             and the TargetID.
                 - 'reconstructable': contains the 'minimal' columns,
-                                     plus the cos_i, system_id,
+                                     plus cos_i, system_id,
                                      planet_id, and gaiaID_DR3. Can be
                                      used to reconstruct all columns. The
                                      system_id and planet_id are the indices
@@ -714,7 +760,7 @@ class PopulationModel:
                 "TargetID",
                 "R_planet",
                 "M_planet",
-                "a",
+                "Porb",
             ]
 
         elif result_format == "reconstructable":
@@ -722,7 +768,7 @@ class PopulationModel:
                 "TargetID",
                 "R_planet",
                 "M_planet",
-                "a",
+                "Porb",
                 "cos_i",
                 "system_id",
                 "planet_id",
