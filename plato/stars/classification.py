@@ -6,8 +6,10 @@ from galpy.orbit import Orbit
 from scipy.stats import norm
 from tqdm import tqdm
 
+from plato.utils import get_abspath
+
 KINEMATICS_TABLE = pd.read_csv(
-    "/home/chris/Documents/Projects/plato/data/external/kinematic_characteristics.csv"
+    get_abspath() + "data/external/kinematic_characteristics.csv"
 )
 
 

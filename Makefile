@@ -26,7 +26,7 @@ save_environment:
 
 ## create requirements.txt with pipreqs
 save_requirements:
-	pipreqs --savepath requirements.txt gallifrey
+	pipreqs --savepath requirements.txt plato
 
 #################################################################################
 # PROJECT RULES                                                                 #

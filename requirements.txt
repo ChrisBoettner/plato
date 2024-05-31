@@ -1,0 +1,11 @@
+astropy==6.0.0
+astroquery==0.4.7
+galpy==1.9.2
+h5py==3.10.0
+matplotlib==3.8.3
+numpy==1.26.4
+pandas==2.2.2
+polars==0.20.30
+scipy==1.13.1
+seaborn==0.13.2
+tqdm==4.66.2

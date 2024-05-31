@@ -6,6 +6,7 @@ from astropy import units as u
 from scipy.stats import norm
 
 from plato.instrument.detection import DetectionModel
+from plato.utils.paths import get_abspath
 
 
 class PopulationModel:
@@ -110,7 +111,7 @@ class PopulationModel:
         }
 
         ngpps_population = pd.read_csv(
-            "/home/chris/Documents/Projects/plato/data/external/NGPPS/"
+            get_abspath() + "data/external/NGPPS/"
             f"{ngpps_mapping[num_embryos]}/"
             f"snapshot_{snapshot_age}.csv"
         )
@@ -209,8 +210,7 @@ class PopulationModel:
 
         # read planetary system metadata
         metadata = pd.read_csv(
-            "/home/chris/Documents/Projects/plato/data/external/NGPPS/"
-            "NGPPS_variables.txt",
+            get_abspath() + "data/external/NGPPS/NGPPS_variables.txt",
             header=None,
             sep=r"\s+",
             names=[
@@ -241,6 +241,24 @@ class PopulationModel:
             return metadata
         else:
             return metadata[["system_id", "[Fe/H]"]]
+
+    def update_stellar_variability(self, sigma_star: float | np.ndarray) -> None:
+        """
+        Update the standard deviation of the variability of the
+        stars in the stellar population.
+
+        Parameters
+        ----------
+        sigma_star : float | np.ndarray
+            The new standard deviation of the variability of the
+            stars in the stellar population. If a float, the same
+            value is used for all stars. If an array, the values
+            are used for each star in the stellar population. The array
+            must have the same length as the stellar population.
+        """
+        stellar_population = self.stellar_population.copy()
+        stellar_population["sigma_star"] = sigma_star
+        self.stellar_population = stellar_population
 
     def calculate_log_probabilities(
         self,
@@ -462,6 +480,84 @@ class PopulationModel:
             conditions, categories, default="Unknown"
         )
         return dataframe
+
+    def _format_results(
+        self,
+        dataframe: pd.DataFrame,
+        result_format: str,
+        additional_columns: Optional[str | list[str]] = None,
+    ) -> pd.DataFrame:
+        """
+        Format the results of the mock population or observation
+        to the specified format.
+
+        Parameters
+        ----------
+        dataframe : pd.DataFrame
+            The DataFrame containing the mock population or observation.
+        result_format : str,
+            The format of the result DataFrame. Must be one of
+            'minimal', 'reconstructable', or 'full'.
+            The available formats are:
+                - 'minimal': contains the planet radius, mass and orbital period,
+                             and the TargetID.
+                - 'reconstructable': contains the 'minimal' columns,
+                                     plus cos_i, system_id,
+                                     planet_id, and gaiaID_DR3. Can be
+                                     used to reconstruct all columns. The
+                                     system_id and planet_id are the indices
+                                     of the system and planet in the NGPPS
+                                     population.
+                - 'full': contains all columns in the mock population,
+                          including the stellar parameters.
+        additional_columns : Optional[str | list[str]], optional
+            A list of additional columns to include in the result DataFrame,
+            by default None.
+
+        Returns
+        -------
+        pd.DataFrame
+            The formatted DataFrame containing the mock population
+            or observation.
+
+        """
+        if result_format == "minimal":
+            columns = [
+                "TargetID",
+                "R_planet",
+                "M_planet",
+                "Porb",
+            ]
+
+        elif result_format == "reconstructable":
+            columns = [
+                "TargetID",
+                "R_planet",
+                "M_planet",
+                "Porb",
+                "cos_i",
+                "system_id",
+                "planet_id",
+                "gaiaID_DR3",
+            ]
+        elif result_format == "full":
+            columns = dataframe.columns
+        else:
+            raise ValueError(
+                "return_full must be one of 'minimal', 'reconstructable', or 'full'."
+            )
+
+        if additional_columns:
+            additional_columns = (
+                [additional_columns]
+                if isinstance(additional_columns, str)
+                else additional_columns
+            )
+        else:
+            additional_columns = []
+
+        unique_columns = set(list(columns) + additional_columns)  # remove duplicates
+        return dataframe[list(unique_columns)]
 
     def create_mock_population(
         self,
@@ -714,78 +810,3 @@ class PopulationModel:
             mock_population = self.add_planet_category(mock_population)
 
         return mock_population.reset_index(drop=True)
-
-    def _format_results(
-        self,
-        dataframe: pd.DataFrame,
-        result_format: str,
-        additional_columns: Optional[str | list[str]] = None,
-    ) -> pd.DataFrame:
-        """
-        Format the results of the mock population or observation
-        to the specified format.
-
-        Parameters
-        ----------
-        dataframe : pd.DataFrame
-            The DataFrame containing the mock population or observation.
-        result_format : str,
-            The format of the result DataFrame. Must be one of
-            'minimal', 'reconstructable', or 'full'.
-            The available formats are:
-                - 'minimal': contains the planet radius, mass and orbital period,
-                             and the TargetID.
-                - 'reconstructable': contains the 'minimal' columns,
-                                     plus cos_i, system_id,
-                                     planet_id, and gaiaID_DR3. Can be
-                                     used to reconstruct all columns. The
-                                     system_id and planet_id are the indices
-                                     of the system and planet in the NGPPS
-                                     population.
-                - 'full': contains all columns in the mock population,
-                          including the stellar parameters.
-        additional_columns : Optional[str | list[str]], optional
-            A list of additional columns to include in the result DataFrame,
-            by default None.
-
-        Returns
-        -------
-        pd.DataFrame
-            The formatted DataFrame containing the mock population
-            or observation.
-
-        """
-        if result_format == "minimal":
-            columns = [
-                "TargetID",
-                "R_planet",
-                "M_planet",
-                "Porb",
-            ]
-
-        elif result_format == "reconstructable":
-            columns = [
-                "TargetID",
-                "R_planet",
-                "M_planet",
-                "Porb",
-                "cos_i",
-                "system_id",
-                "planet_id",
-                "gaiaID_DR3",
-            ]
-        elif result_format == "full":
-            columns = dataframe.columns
-        else:
-            raise ValueError(
-                "return_full must be one of 'minimal', 'reconstructable', or 'full'."
-            )
-
-        if additional_columns:
-            additional_columns = (
-                [additional_columns]
-                if isinstance(additional_columns, str)
-                else additional_columns
-            )
-            columns += additional_columns
-        return dataframe[columns]

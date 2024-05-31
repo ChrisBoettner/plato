@@ -6,6 +6,7 @@ from pandas._typing import AggFuncTypeBase
 from tqdm import tqdm
 
 from plato.planets.populations import PopulationModel
+from plato.utils import get_abspath
 
 
 class ObservationModel:
@@ -60,7 +61,7 @@ class ObservationModel:
             else self.metallicity_cut_mocks
         )
 
-    def create_mocks(
+    def save_mocks(
         self,
         targets: pd.DataFrame,
         num_embryos: int | list[int],
@@ -71,7 +72,8 @@ class ObservationModel:
         path: Optional[str] = None,
     ) -> dict[int, pd.DataFrame]:
         """
-        Create mock observations of exoplanet populations.
+        Create mock observations of exoplanet populations,
+        and save them to disk.
 
         Parameters
         ----------
@@ -121,7 +123,7 @@ class ObservationModel:
             mocks = []
             for i in tqdm(
                 range(num_mocks),
-                desc=f"Creating mock observations for {n} embryos:",
+                desc=f"Creating mock observations for {n} embryos: ",
                 disable=not progress,
             ):
                 mock = population_model.create_mock_observation(
@@ -166,14 +168,9 @@ class ObservationModel:
             and the values are lists of DataFrames.
         """
         if select_metallicity_cut_mocks:
-            path = (
-                "/home/chris/Documents/Projects/plato/"
-                "data/interim/mock_observations_halo_Fe_cut"
-            )
+            path = get_abspath() + "data/interim/mock_observations_halo_Fe_cut"
         else:
-            path = (
-                "/home/chris/Documents/Projects/plato/" "data/interim/mock_observations"
-            )
+            path = get_abspath() + "data/interim/mock_observations"
 
         num_embryos = [num_embryos] if isinstance(num_embryos, int) else num_embryos
 
@@ -294,18 +291,18 @@ class ObservationModel:
         for df in dfs[1:]:
             result_df = result_df.add(df, fill_value=0)
         result_df /= len(dfs)
-        return pd.DataFrame(np.ceil(result_df)).astype(int).fillna(0)
+        return pd.DataFrame(result_df).astype(float).fillna(0)
 
     def stats_pivot_table(
         self,
         num_embryos: int | list[int],
-        statistic: str,
+        statistic: str | tuple[str, AggFuncTypeBase],
         reindex: list = [
-            "Earth",
-            "Super-Earth",
-            "Neptunian",
-            "Sub-Giant",
             "Giant",
+            "Sub-Giant",
+            "Neptunian",
+            "Super-Earth",
+            "Earth",
         ],
         **kwargs: Any,
     ) -> pd.DataFrame:
@@ -318,12 +315,14 @@ class ObservationModel:
             The number of embryos for the mock observations, loads the corresponding
             mocks from the ObservationModel. If a list is provided, the statistics
             are averaged over all the mocks.
-        statistic : str
+        statistic : str | tuple[str, AggFuncTypeBase]
             The statistic to pivot the table on. Must be a string description of
-            the statistic (e.g. "mean", "std").
+            the statistic (e.g. "mean", "std"), or a 2-element tuple with the
+            description and the aggregation function (e.g. ("mean",
+            lambda x: x.mean()) ).
         reindex : list, optional
             List of planet categories to reindex the pivot table with, by default
-            ["Earth", "Super-Earth", "Neptunian", "Sub-Giant", "Giant"]. This also
+            ["Giant", "Sub-Giant", "Neptunian", "Super-Earth", "Earth"]. This also
             fills in any missing planet categories.
 
         Returns
@@ -332,17 +331,24 @@ class ObservationModel:
             Pivot table of the aggregated statistics, with the period bins as the index,
             the planet category as the columns, and the statistic as the values.
         """
+        if isinstance(statistic, str):
+            statistic = (statistic, statistic)
+
+        if not isinstance(statistic, tuple):
+            raise ValueError("statistic must be a string or a 2-element tuple.")
 
         stats_df = self.aggregrate_statistics(
             num_embryos=num_embryos,
-            statistic=[statistic],
+            statistic=[statistic[1]],
             **kwargs,
         )
+
+        stats_df.columns = [statistic[0]]
 
         pivot_table = stats_df.pivot_table(
             index="Porb_bin",
             columns="Planet Category",
-            values=statistic,
+            values=statistic[0],
             observed=False,
             fill_value=0,
         ).T
@@ -351,6 +357,8 @@ class ObservationModel:
     def formatted_statistics(
         self,
         num_embryos: int | list[int],
+        decimals: int = 1,
+        prefer_int: bool = True,
         **kwargs: Any,
     ) -> pd.DataFrame:
         """
@@ -368,6 +376,11 @@ class ObservationModel:
             Number of embryos for the mock observations, loads the corresponding
             mocks from the ObservationModel. If a list is provided, the formatted
             statistics are concatenated with a newline character.
+        decimals : int, optional
+            Number of decimal places to round the statistics to, by default 1.
+        prefer_int : bool, optional
+            If True, prefer rounding to an integer if possible. That is, if the
+            rounded value is not zero, it is rounded to an integer, by default True.
 
         Returns
         -------
@@ -377,15 +390,33 @@ class ObservationModel:
 
         num_embryos = [num_embryos] if isinstance(num_embryos, int) else num_embryos
 
+        def round_to_int(x: float) -> float:
+            # round to integer if possible
+            rounded_val = np.round(x)
+            if prefer_int and np.floor(rounded_val) > 0:
+                return int(rounded_val)
+            return np.round(x, decimals)
+
         annots = []
         for num in num_embryos:
             mean_pivot = (
-                self.stats_pivot_table(num, "mean", **kwargs).astype(int).astype(str)
+                self.stats_pivot_table(num, "mean", **kwargs)
+                .map(round_to_int)
+                .astype(str)
             )
-            std_pivot = (
-                self.stats_pivot_table(num, "std", **kwargs).astype(int).astype(str)
+            iqr_pivot = (
+                self.stats_pivot_table(
+                    num,
+                    ("iqr", lambda x: x.quantile(0.84) - x.quantile(0.16)),
+                    **kwargs,
+                )
+                .map(round_to_int)
+                .astype(str)
             )
-            annots.append(mean_pivot + r" $\pm$ " + std_pivot)
+            an = (mean_pivot + " (" + iqr_pivot + ")").map(
+                lambda s: s.replace(".0 ", " ").replace(".0)", ")")
+            )
+            annots.append(an)
         annoted_stats = annots[0]
         for df in annots[1:]:
             annoted_stats = annoted_stats + "\n" + df

@@ -3,6 +3,7 @@ from typing import Callable, Optional
 import pandas as pd
 
 from plato.instrument.noise import NoiseModel
+from plato.utils.paths import get_abspath
 
 
 def quality_cuts(
@@ -115,7 +116,7 @@ def filter_valid_targets(
             - Mass > 0
             - Teff > 0
             - logg is not null
-            - [Fe/H] is not null
+            - [Fe/H] < 1
 
     Returns
     -------
@@ -130,7 +131,7 @@ def filter_valid_targets(
             & (dataframe["Mass"] > 0)
             & (dataframe["Teff"] > 0)
             & dataframe["logg"].notnull()
-            & dataframe["[Fe/H]"].notnull()
+            & (dataframe["[Fe/H]"] < 1)
         )
 
     return target_dataframe[conditions(target_dataframe)].reset_index(drop=True)
@@ -206,9 +207,7 @@ def update_field_dataframe(
         target dataframe.
     """
 
-    field_dataframe = pd.read_csv(
-        f"/home/chris/Documents/Projects/plato/data/processed/{field}_targets.csv"
-    )
+    field_dataframe = pd.read_csv(get_abspath() + f"data/processed/{field}_targets.csv")
 
     update_field_dataframe = all_sky_dataframe[
         all_sky_dataframe["gaiaID_DR3"].isin(field_dataframe["gaiaID_DR3"])
