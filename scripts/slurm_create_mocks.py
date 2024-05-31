@@ -18,8 +18,8 @@ def submit_slurm_job(
     # template for the Slurm batch script
     slurm_template = f"""#!/bin/bash
 #SBATCH --job-name=mock_obs_{num_embryos}_{suffix}
-#SBATCH --output=obs_mock_out/%x-%j.out
-#SBATCH --error=obs_mock_out/%x-%j.err
+#SBATCH --output=mock_obs_out/%x.out
+#SBATCH --error=mock_obs_out/%x.err
 #SBATCH --time=03:00:00
 #SBATCH --partition=regular
 #SBATCH --nodes=1

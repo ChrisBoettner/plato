@@ -8,8 +8,8 @@ def submit_slurm_job(
     # template for the Slurm batch script
     slurm_template = f"""#!/bin/bash
 #SBATCH --job-name={notebook_name}
-#SBATCH --output=notebook_out/%x-%j.out
-#SBATCH --error=notebook_out/%x-%j.err
+#SBATCH --output=notebook_out/%x.out
+#SBATCH --error=notebook_out/%x.err
 #SBATCH --time=01:00:00
 #SBATCH --partition=regular
 #SBATCH --nodes=1
