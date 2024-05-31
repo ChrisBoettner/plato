@@ -218,10 +218,10 @@ class FigureProcessor:
 
         """
         if relative_path:
-            path = os.path.join(get_abspath(), figure_directory)
+            figure_directory = os.path.join(get_abspath(), figure_directory)
 
         path = os.path.join(figure_directory, file_name)
-
+        print(path)
         # create directory if it doesn't exist already
         if not os.path.exists(os.path.dirname(path)):
             os.makedirs(os.path.dirname(path))
