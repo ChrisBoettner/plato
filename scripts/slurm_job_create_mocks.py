@@ -18,20 +18,21 @@ def submit_slurm_job(
 
     # Template for the Slurm batch script
     slurm_template = f"""#!/bin/bash
-    #SBATCH --job-name=mock_obs_{num_embryos}_{suffix}
-    #SBATCH --output=out/%x-%j.out
-    #SBATCH --error=out/%x-%j.err
-    #SBATCH --time=03:00:00
-    #SBATCH --partition=regular
-    #SBATCH --nodes=1
-    #SBATCH --mem=8GB
+#SBATCH --job-name=mock_obs_{num_embryos}_{suffix}
+#SBATCH --output=out/%x-%j.out
+#SBATCH --error=out/%x-%j.err
+#SBATCH --time=03:00:00
+#SBATCH --partition=regular
+#SBATCH --nodes=1
+#SBATCH --mem=8GB
 
-    # load virtual env
-    mamba deactivate
-    mamba activate plato
+# load virtual env
+source ~/.bashrc
+mamba deactivate
+mamba activate plato
 
-    # Run the script
-    python {script_path} {num_embryos} {metallicity_arg}
+# Run the script
+python {script_path} {num_embryos} {metallicity_arg}
     """
 
     # Write the job script to a file
