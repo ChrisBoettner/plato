@@ -5,11 +5,12 @@ import pandas as pd
 
 from plato.planets.observation import ObservationModel
 from plato.stars import filter_valid_targets
+from plato.utils import get_abspath
 
 
 def main(num_embryos: int, metallicity_limit: Optional[float] = None) -> None:
-    LOPS2 = pd.read_csv("../data/processed/LOPS2_targets.csv")
-    LOPN1 = pd.read_csv("../data/processed/LOPN1_targets.csv")
+    LOPS2 = pd.read_csv(get_abspath() + "data/processed/LOPS2_targets.csv")
+    LOPN1 = pd.read_csv(get_abspath() + "data/processed/LOPN1_targets.csv")
 
     fields = pd.concat([LOPS2, LOPN1])
     fields = filter_valid_targets(fields)

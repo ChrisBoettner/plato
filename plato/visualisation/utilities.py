@@ -6,6 +6,8 @@ from matplotlib.axes import Axes
 from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
 
+from plato.utils import get_abspath
+
 
 def set_plot_defaults() -> None:
     """
@@ -195,6 +197,7 @@ class FigureProcessor:
         self,
         file_name: str,
         figure_directory: str,
+        relative_path: bool = True,
         save: Optional[bool] = True,
     ) -> None:
         """
@@ -206,11 +209,17 @@ class FigureProcessor:
             Name and relative path of file in figures directory.
         figure_directory : str
             Path to figures directory.
+        relative_path : bool, optional
+            If True, the path is assumed to be relative to the plato directory, and
+            the absolute path is appended. The default is True.
         save: Optional[bool], optional
             If False, only create file structure and don't actually save image. The
             default is True.
 
         """
+        if relative_path:
+            path = os.path.join(get_abspath(), figure_directory)
+
         path = os.path.join(figure_directory, file_name)
 
         # create directory if it doesn't exist already

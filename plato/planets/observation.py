@@ -105,9 +105,9 @@ class ObservationModel:
         # set path
         if path is None:
             if metallicity_limit is None:
-                path = "../data/interim/mock_observations"
+                path = get_abspath() + "data/interim/mock_observations"
             else:
-                path = "../data/interim/mock_observations_halo_Fe_cut"
+                path = get_abspath() + "data/interim/mock_observations_halo_Fe_cut"
 
         num_embryos = [num_embryos] if isinstance(num_embryos, int) else num_embryos
 
