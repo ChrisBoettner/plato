@@ -3,7 +3,10 @@ import subprocess
 import argparse
 
 
-def submit_slurm_job(notebook_name: str) -> None:
+def submit_slurm_job(
+    notebook_name: str,
+    number_of_cores: int = 1,
+) -> None:
     # template for the Slurm batch script
     slurm_template = f"""#!/bin/bash
 #SBATCH --job-name={notebook_name}
@@ -12,6 +15,7 @@ def submit_slurm_job(notebook_name: str) -> None:
 #SBATCH --time=01:00:00
 #SBATCH --partition=regular
 #SBATCH --nodes=1
+#SBATCH --cpus-per-task={str(number_of_cores)}
 #SBATCH --mem=8GB
 
 # load virtual env
@@ -57,6 +61,12 @@ if __name__ == "__main__":
             "C_halo_special_target_list",
         ],
         help="List of notebook names to submit as Slurm jobs.",
+    )
+    parser.add_argument(
+        "--number_of_cores",
+        type=int,
+        default=1,
+        help="Number of cores to use.",
     )
 
     args = parser.parse_args()
