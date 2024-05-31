@@ -8,7 +8,10 @@ from plato.stars import filter_valid_targets
 from plato.utils import get_abspath
 
 
-def main(num_embryos: int, metallicity_limit: Optional[float] = None) -> None:
+def creat_and_save_mocks(
+    num_embryos: int, metallicity_limit: Optional[float] = None
+) -> None:
+    # Create and save mock observations
     LOPS2 = pd.read_csv(get_abspath() + "data/processed/LOPS2_targets.csv")
     LOPN1 = pd.read_csv(get_abspath() + "data/processed/LOPN1_targets.csv")
 
@@ -73,4 +76,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    main(args.num_embryos, args.metallicity_limit)
+    creat_and_save_mocks(args.num_embryos, args.metallicity_limit)
