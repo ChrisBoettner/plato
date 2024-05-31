@@ -111,12 +111,13 @@ def filter_valid_targets(
         returns a boolean mask of valid targets,
         by default None. If None, the default
         conditions are used, which are:
+            - Population is not null
             - Stellar Type is FGK
             - Radius > 0
             - Mass > 0
             - Teff > 0
-            - logg is not null
             - [Fe/H] < 1
+            - logg is not null
 
     Returns
     -------
@@ -126,12 +127,13 @@ def filter_valid_targets(
 
     if conditions is None:
         conditions = (
-            lambda dataframe: (dataframe["Stellar Type"] == "FGK")
+            lambda dataframe: (dataframe["Population"].notnull())
+            & (dataframe["Stellar Type"] == "FGK")
             & (dataframe["Radius"] > 0)
             & (dataframe["Mass"] > 0)
             & (dataframe["Teff"] > 0)
-            & dataframe["logg"].notnull()
             & (dataframe["[Fe/H]"] < 1)
+            & dataframe["logg"].notnull()
         )
 
     return target_dataframe[conditions(target_dataframe)].reset_index(drop=True)
