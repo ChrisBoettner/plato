@@ -16,7 +16,7 @@ def submit_slurm_job(
 #SBATCH --partition=regular
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task={str(number_of_cores)}
-#SBATCH --mem=8GB
+#SBATCH --mem=32GB
 
 # load virtual env
 source ~/.bashrc
