@@ -1,3 +1,4 @@
+import os
 import subprocess
 from typing import Optional
 
@@ -47,6 +48,9 @@ def submit_slurm_job(
             "Failed to submit job for num_embryos="
             f"{num_embryos} with {suffix}: {result.stderr}"
         )
+
+    # remove the script file
+    os.remove(script_filename)
 
 
 # Example calls for different numbers of embryos and both conditions:
