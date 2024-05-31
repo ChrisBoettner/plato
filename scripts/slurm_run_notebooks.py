@@ -1,10 +1,9 @@
 import os
 import subprocess
+import argparse
 
 
-def submit_slurm_job(
-    notebook_name: str,
-) -> None:
+def submit_slurm_job(notebook_name: str) -> None:
     # template for the Slurm batch script
     slurm_template = f"""#!/bin/bash
 #SBATCH --job-name={notebook_name}
@@ -21,7 +20,7 @@ mamba deactivate
 mamba activate plato
 
 # Run the script
-python run_notebook {notebook_name}
+python run_notebook.py {notebook_name}
     """
 
     # Write the job script to a file
@@ -40,16 +39,31 @@ python run_notebook {notebook_name}
     os.remove(script_filename)
 
 
-notebooks = [
-    "03_plato_fields",
-    "04_stellar_sample",
-    "05_detection_efficiency",
-    "06_planet_populations",
-    "07_planet_population_metrics",
-    "08_heatmaps",
-    "B_stellar_variability",
-    "C_halo_special_target_list",
-]
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Submit Slurm jobs for Jupyter notebooks."
+    )
+    parser.add_argument(
+        "notebooks",
+        nargs="*",
+        default=[
+            "03_plato_fields",
+            "04_stellar_sample",
+            "05_detection_efficiency",
+            "06_planet_populations",
+            "07_planet_population_metrics",
+            "08_heatmaps",
+            "B_stellar_variability",
+            "C_halo_special_target_list",
+        ],
+        help="List of notebook names to submit as Slurm jobs.",
+    )
 
-for notebook in notebooks:
-    submit_slurm_job(notebook)
+    args = parser.parse_args()
+    notebooks = args.notebooks
+
+    if isinstance(notebooks, str):
+        notebooks = [notebooks]
+
+    for notebook in notebooks:
+        submit_slurm_job(notebook)
