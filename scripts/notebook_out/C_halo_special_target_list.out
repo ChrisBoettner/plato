@@ -1,0 +1,41 @@
+Successfully executed the notebook: /home3/p305250/plato/notebooks/C_halo_special_target_list.ipynb
+
+###############################################################################
+Hábrók Cluster
+Job 9406710 for user p305250
+Finished at: Fri May 31 16:45:19 CEST 2024
+
+Job details:
+============
+
+Job ID              : 9406710
+Name                : C_halo_special_target_list
+User                : p305250
+Partition           : regularshort
+Nodes               : node103
+Number of Nodes     : 1
+Cores               : 1
+Number of Tasks     : 1
+State               : COMPLETED
+Submit              : 2024-05-31T16:44:42
+Start               : 2024-05-31T16:44:43
+End                 : 2024-05-31T16:45:15
+Reserved walltime   : 01:00:00
+Used walltime       : 00:00:32
+Used CPU time       : 00:00:08 (efficiency: 26.97%)
+% User (Computation): 77.87%
+% System (I/O)      : 22.13%
+Mem reserved        : 32G
+Max Mem (Node/step) : 80.00K (node103, per node)
+Full Max Mem usage  : 80.00K
+Total Disk Read     : 2.28K
+Total Disk Write    : 1.00 
+
+Acknowledgements:
+=================
+
+Please see this page for information about acknowledging Hábrók in your publications:
+
+https://wiki.hpc.rug.nl/habrok/introduction/scientific_output
+
+################################################################################

@@ -1,0 +1,41 @@
+Successfully executed the notebook: /home3/p305250/plato/notebooks/05_detection_efficiency.ipynb
+
+###############################################################################
+Hábrók Cluster
+Job 9406705 for user p305250
+Finished at: Fri May 31 16:57:32 CEST 2024
+
+Job details:
+============
+
+Job ID              : 9406705
+Name                : 05_detection_efficiency
+User                : p305250
+Partition           : regularshort
+Nodes               : node104
+Number of Nodes     : 1
+Cores               : 1
+Number of Tasks     : 1
+State               : COMPLETED
+Submit              : 2024-05-31T16:44:41
+Start               : 2024-05-31T16:44:42
+End                 : 2024-05-31T16:57:30
+Reserved walltime   : 01:00:00
+Used walltime       : 00:12:48
+Used CPU time       : 00:11:21 (efficiency: 88.80%)
+% User (Computation): 99.25%
+% System (I/O)      :  0.75%
+Mem reserved        : 32G
+Max Mem (Node/step) : 847.08M (node104, per node)
+Full Max Mem usage  : 847.08M
+Total Disk Read     : 830.07M
+Total Disk Write    : 1.22M
+
+Acknowledgements:
+=================
+
+Please see this page for information about acknowledging Hábrók in your publications:
+
+https://wiki.hpc.rug.nl/habrok/introduction/scientific_output
+
+################################################################################

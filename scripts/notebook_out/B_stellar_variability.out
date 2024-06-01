@@ -1,0 +1,41 @@
+Successfully executed the notebook: /home3/p305250/plato/notebooks/B_stellar_variability.ipynb
+
+###############################################################################
+Hábrók Cluster
+Job 9406709 for user p305250
+Finished at: Fri May 31 16:59:11 CEST 2024
+
+Job details:
+============
+
+Job ID              : 9406709
+Name                : B_stellar_variability
+User                : p305250
+Partition           : regularshort
+Nodes               : node103
+Number of Nodes     : 1
+Cores               : 1
+Number of Tasks     : 1
+State               : RUNNING
+Submit              : 2024-05-31T16:44:42
+Start               : 2024-05-31T16:44:43
+End                 : --
+Reserved walltime   : 01:00:00
+Used walltime       : 00:14:28
+Used CPU time       : --
+% User (Computation): --
+% System (I/O)      : --
+Mem reserved        : 32G
+Max Mem (Node/step) : 0.00  (Node unknown, N/A)
+Full Max Mem usage  : 0.00  (Until last completed step)
+Total Disk Read     : 0.00  (Until last completed step)
+Total Disk Write    : 0.00  (Until last completed step)
+
+Acknowledgements:
+=================
+
+Please see this page for information about acknowledging Hábrók in your publications:
+
+https://wiki.hpc.rug.nl/habrok/introduction/scientific_output
+
+################################################################################

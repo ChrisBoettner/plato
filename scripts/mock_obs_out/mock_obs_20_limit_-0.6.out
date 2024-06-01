@@ -1,0 +1,40 @@
+
+###############################################################################
+Hábrók Cluster
+Job 9404943 for user p305250
+Finished at: Fri May 31 16:06:11 CEST 2024
+
+Job details:
+============
+
+Job ID              : 9404943
+Name                : mock_obs_20_limit_-0.6
+User                : p305250
+Partition           : regularshort
+Nodes               : node104
+Number of Nodes     : 1
+Cores               : 1
+Number of Tasks     : 1
+State               : COMPLETED
+Submit              : 2024-05-31T15:21:54
+Start               : 2024-05-31T15:21:55
+End                 : 2024-05-31T16:06:11
+Reserved walltime   : 03:00:00
+Used walltime       : 00:44:16
+Used CPU time       : 00:43:50 (efficiency: 99.05%)
+% User (Computation): 86.73%
+% System (I/O)      : 13.27%
+Mem reserved        : 8G
+Max Mem (Node/step) : 3.39G (node104, per node)
+Full Max Mem usage  : 3.39G
+Total Disk Read     : 258.70M
+Total Disk Write    : 518.39M
+
+Acknowledgements:
+=================
+
+Please see this page for information about acknowledging Hábrók in your publications:
+
+https://wiki.hpc.rug.nl/habrok/introduction/scientific_output
+
+################################################################################

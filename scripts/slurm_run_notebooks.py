@@ -12,7 +12,7 @@ def submit_slurm_job(
 #SBATCH --job-name={notebook_name}
 #SBATCH --output=notebook_out/%x.out
 #SBATCH --error=notebook_out/%x.err
-#SBATCH --time=01:00:00
+#SBATCH --time=03:00:00
 #SBATCH --partition=regular
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task={str(number_of_cores)}

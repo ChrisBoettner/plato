@@ -1,0 +1,41 @@
+Successfully executed the notebook: /home3/p305250/plato/notebooks/04_stellar_sample.ipynb
+
+###############################################################################
+Hábrók Cluster
+Job 9406704 for user p305250
+Finished at: Fri May 31 16:50:04 CEST 2024
+
+Job details:
+============
+
+Job ID              : 9406704
+Name                : 04_stellar_sample
+User                : p305250
+Partition           : regularshort
+Nodes               : node104
+Number of Nodes     : 1
+Cores               : 1
+Number of Tasks     : 1
+State               : COMPLETED
+Submit              : 2024-05-31T16:44:41
+Start               : 2024-05-31T16:44:42
+End                 : 2024-05-31T16:50:03
+Reserved walltime   : 01:00:00
+Used walltime       : 00:05:21
+Used CPU time       : 00:04:15 (efficiency: 79.67%)
+% User (Computation): 94.21%
+% System (I/O)      :  5.79%
+Mem reserved        : 32G
+Max Mem (Node/step) : 5.58G (node104, per node)
+Full Max Mem usage  : 5.58G
+Total Disk Read     : 2.34G
+Total Disk Write    : 1.27M
+
+Acknowledgements:
+=================
+
+Please see this page for information about acknowledging Hábrók in your publications:
+
+https://wiki.hpc.rug.nl/habrok/introduction/scientific_output
+
+################################################################################
