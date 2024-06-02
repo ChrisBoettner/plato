@@ -9,7 +9,8 @@ from plato.utils import get_abspath
 
 
 def creat_and_save_mocks(
-    num_embryos: int, metallicity_limit: Optional[float] = None
+    num_embryos: int,
+    metallicity_limit: Optional[float] = None,
 ) -> None:
     # Create and save mock observations
     LOPS2 = pd.read_csv(get_abspath() + "data/processed/LOPS2_targets.csv")
@@ -44,12 +45,17 @@ def creat_and_save_mocks(
     obs_model = ObservationModel(load_mocks=False)
 
     if metallicity_limit is None:
+        print(f"Creating mocks for {num_embryos} embryos with no metallicity limit.")
         obs_model.save_mocks(
             fields,
             num_embryos=num_embryos,
             num_mocks=num_mocks,
         )
     else:
+        print(
+            f"Creating mocks for {num_embryos} embryos with metallicity "
+            f"limit of {metallicity_limit}."
+        )
         obs_model.save_mocks(
             fields,
             num_embryos=num_embryos,
