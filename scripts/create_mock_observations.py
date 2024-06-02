@@ -44,6 +44,8 @@ def creat_and_save_mocks(
     num_mocks = 300
     obs_model = ObservationModel(load_mocks=False)
 
+    print(type(num_embryos))
+
     if metallicity_limit is None:
         print(f"Creating mocks for {num_embryos} embryos with no metallicity limit.")
         obs_model.save_mocks(
@@ -71,8 +73,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "num_embryos",
         type=int,
-        nargs="+",
-        help="List of integers for the number of embryos.",
+        help="The number of embryos.",
     )
     parser.add_argument(
         "--metallicity_limit",
