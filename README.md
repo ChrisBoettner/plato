@@ -1,4 +1,5 @@
-gallifrey
+plato
 ==============================
 
-Automated Kernel Search for Gaussian Processes and its application to exoplanet transit light curves.
+Code and Analysis accompanying the paper Exoplanets Across Galactic Stellar Populations with PLATO:
+Estimating Exoplanet Yields Around FGK Stars for the Thin Disk, Thick Disk and Stellar Halo.

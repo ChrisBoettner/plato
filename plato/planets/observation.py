@@ -111,10 +111,6 @@ class ObservationModel:
 
         num_embryos = [num_embryos] if isinstance(num_embryos, int) else num_embryos
 
-        print(path)
-        print(num_embryos)
-        print(metallicity_limit)
-
         # create mocks
         mock_dict = {}
         for n in num_embryos:
