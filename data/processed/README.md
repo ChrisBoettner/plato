@@ -66,11 +66,11 @@ The columns in the dataset are as follows:
 - **[alpha/Fe]**: Alpha elemental abundance from Gaia RV spectra, alphafe_gspspec in Gaia DR3
 - **e_[alpha/Fe]_lower**: Lower error on alpha element abundance
 - **e_[alpha/Fe]_upper**: Upper error on alpha element abundance
-- **[Fe/H]**: Metallicity estimate, either from RVS spectra (mh_gsspec in Gaia DR3), BP/RP spectra (mh_gspphot in Gaia DR3) or XGBOOST (Andrae2023)
+- **[Fe/H]**: Metallicity estimate, either from RVS spectra (mh_gsspec in Gaia DR3) or XGBOOST (Andrae2023)
 - **[Fe/H]_source**: Source of the metallicity estimate
 - **e_[Fe/H]_lower**: Lower error on the metallicity estimate (NaN in case of Andrae2023)
 - **e_[Fe/H]_upper**: Upper error on the metallicity estimate (NaN in case of Andrae2023)
-- **logg**: log g estimate, either from RVS spectra (logg_gsspec in Gaia DR3), BP/RP spectra (logg_gspphot in Gaia DR3) or XGBOOST (Andrae2023)
+- **logg**: log g estimate, either from RVS spectra (logg_gsspec in Gaia DR3) or XGBOOST (Andrae2023)
 - **logg_source**: Source of the log g estimate
 - **e_logg_lower**: Lower error on the log g estimate (NaN in case of Andrae2023)
 - **e_logg_upper**: Upper error on the log g estimate (NaN in case of Andrae2023)
