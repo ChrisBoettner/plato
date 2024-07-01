@@ -57,6 +57,7 @@ if __name__ == "__main__":
             "06_planet_populations",
             "07_planet_population_metrics",
             "08_heatmaps",
+            "A_survey_comparison",
             "B_stellar_variability",
             "C_halo_special_target_list",
         ],
