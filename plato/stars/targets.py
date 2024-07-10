@@ -116,7 +116,7 @@ def filter_valid_targets(
             - Radius > 0
             - Mass > 0
             - Teff > 0
-            - [Fe/H] < 1
+            - [Fe/H] is not null
             - logg is not null
 
     Returns
@@ -132,7 +132,7 @@ def filter_valid_targets(
             & (dataframe["Radius"] > 0)
             & (dataframe["Mass"] > 0)
             & (dataframe["Teff"] > 0)
-            & (dataframe["[Fe/H]"] < 1)
+            & (dataframe["[Fe/H]"].notnull())
             & dataframe["logg"].notnull()
         )
 
