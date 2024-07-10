@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 
@@ -6,6 +8,7 @@ def accumulate_from_sources(
     dataframe: pd.DataFrame,
     column: str,
     source_columns: list[str],
+    additional_masks: Optional[dict[str, np.ndarray | pd.Series]] = None,
     include_errors: bool = True,
     error_suffixes: list[str] = ["_lower", "_upper"],
     drop_sources: bool = True,
@@ -28,6 +31,11 @@ def accumulate_from_sources(
     source_columns : list[str]
         The names of the source columns to accumulate the new column from.
         The order of the sources in the list will determine the priority order.
+    additional_masks : dict[str, np.ndarray | pd.Series], optional
+        Additional masks to apply to the source columns before accumulating
+        the new column, for example quality flags. Additional masks should
+        be given as a dictionary with the source column names as keys,
+        and the corresponding masks as values, by default None.
     include_errors : bool, optional
         Whether to accumulate the errors in the new column as well.
         The errors columns should have the same name as the source columns
@@ -48,6 +56,9 @@ def accumulate_from_sources(
         and the source columns dropped if specified.
 
     """
+    if additional_masks is None:
+        additional_masks = {}
+
     # Initialize the columns for metallicity and its errors
     dataframe[column] = np.nan
     dataframe[f"{column}_source"] = ""
@@ -58,6 +69,8 @@ def accumulate_from_sources(
     # Add metallicity in the following priority order
     for source in source_columns:
         mask = dataframe[f"{source}"].notnull() & dataframe[column].isnull()
+        if source in additional_masks.keys():
+            mask = mask & additional_masks[source]
         dataframe.loc[mask, column] = dataframe[f"{source}"]
         dataframe.loc[mask, f"{column}_source"] = source
         if include_errors:
