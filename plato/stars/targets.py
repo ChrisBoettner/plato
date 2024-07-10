@@ -187,6 +187,7 @@ def filter_p1_targets(
 def update_field_dataframe(
     all_sky_dataframe: pd.DataFrame,
     field: str,
+    save: bool = False,
 ) -> pd.DataFrame:
     """
     Convinience function to update the field target dataframes.
@@ -200,7 +201,9 @@ def update_field_dataframe(
     all_sky_dataframe : pd.DataFrame
         The all sky dataframe.
     field : str
-        The field name, should be LOPS2 or LOPN1,
+        The field name, should be LOPS2 or LOPN1
+    save : bool, optional
+        If True, save the updated field dataframe, by default False.
 
     Returns
     -------
@@ -213,8 +216,14 @@ def update_field_dataframe(
 
     update_field_dataframe = all_sky_dataframe[
         all_sky_dataframe["gaiaID_DR3"].isin(field_dataframe["gaiaID_DR3"])
-    ]
+    ].copy()
 
     # add n_cameras column back in
     update_field_dataframe["n_cameras"] = field_dataframe["n_cameras"]
+
+    if save:
+        update_field_dataframe.to_csv(
+            get_abspath() + f"data/processed/{field}_targets.csv", index=False
+        )
+
     return update_field_dataframe
