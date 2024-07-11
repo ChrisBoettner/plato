@@ -76,17 +76,17 @@ The columns in the dataset are as follows:
 | logg_source | Source of the log g estimate |
 | e_logg_lower | Lower error on the log g estimate (NaN in case of Andrae2023) |
 | e_logg_upper | Upper error on the log g estimate (NaN in case of Andrae2023) |
-| [Fe/H]_apogee | Metallicity estimate from APOGEE-DR17 (not available for all targets) |
+| [Fe/H]_apogee | Metallicity estimate from APOGEE-DR17 |
 | e_[Fe/H]_apogee | Error on APOGEE metallicity estimate |
-| [alpha/M]_apogee | Alpha abundance estimate from APOGEE-DR17 (not available for all targets) |
+| [alpha/M]_apogee | Alpha abundance estimate from APOGEE-DR17 |
 | e_[alpha/M]_apogee | Error on APOGEE alpha estimate |
-| logg_apogee | log g estimate from APOGEE-DR17 (not available for all targets) |
+| logg_apogee | log g estimate from APOGEE-DR17 |
 | e_logg_apogee | Error on APOGEE log g estimate |
-| [Fe/H]_galah | Metallicity estimate from GALAH DR3 (not available for all targets) |
+| [Fe/H]_galah | Metallicity estimate from GALAH DR3 |
 | e_[Fe/H]_galah | Error on GALAH metallicity |
-| [alpha/Fe]_galah | Alpha abundance estimate from GALAH DR3 (not available for all targets) |
+| [alpha/Fe]_galah | Alpha abundance estimate from GALAH DR3 |
 | e_[alpha/Fe]_galah | Error on GALAH alpha abundance |
-| logg_galah | log g estimate from GALAH DR3 (not available for all targets) |
+| logg_galah | log g estimate from GALAH DR3 |
 | e_logg_galah | Error on GALAH log g |
 | GLON | Galactic longitude (deg) |
 | GLAT | Galactic latitude (deg) |
