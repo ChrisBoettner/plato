@@ -190,7 +190,7 @@ def update_field_dataframe(
     save: bool = False,
 ) -> pd.DataFrame:
     """
-    Convinience function to update the field target dataframes.
+    Convenience function to update the field target dataframes.
     Given the all sky dataframe and the field name, load
     the field target dataframe and return the intersection
     entries from the all sky dataframe that are in the field
@@ -211,19 +211,22 @@ def update_field_dataframe(
         The all sky dataframe with only the stars in the field
         target dataframe.
     """
-
     field_dataframe = pd.read_csv(get_abspath() + f"data/processed/{field}_targets.csv")
 
     update_field_dataframe = all_sky_dataframe[
         all_sky_dataframe["gaiaID_DR3"].isin(field_dataframe["gaiaID_DR3"])
     ].copy()
 
-    # add n_cameras column back in
-    update_field_dataframe["n_cameras"] = field_dataframe["n_cameras"]
+    # Merge n_cameras column from field_dataframe
+    update_field_dataframe = update_field_dataframe.merge(
+        field_dataframe[["gaiaID_DR3", "n_cameras"]],
+        on="gaiaID_DR3",
+        how="left",
+    )
 
     if save:
-        update_field_dataframe.to_csv(
-            get_abspath() + f"data/processed/{field}_targets.csv", index=False
-        )
+        output_path = get_abspath() + f"data/processed/{field}_targets_updated.csv"
+        update_field_dataframe.to_csv(output_path, index=False)
+        print(f"Updated dataframe saved to: {output_path}")
 
     return update_field_dataframe
