@@ -1,3 +1,5 @@
+from typing import Any
+
 import astropy.units as u
 import numpy as np
 import pandas as pd
@@ -489,3 +491,109 @@ def classify_stars(
             "include_probabilities=True."
         )
     return new_df
+
+
+def classify_by_chemistry(
+    dataframe: pd.DataFrame,
+    metallicity_column: str = "[Fe/H]",
+    alpha_column: str = "[alpha/Fe]",
+    output_column: str = "Population by Chemistry",
+    return_full: bool = True,
+    overwrite: bool = True,
+    **kwargs: Any,
+) -> pd.DataFrame:
+    """
+    Classify stars into their components based on their metallicity and alpha
+    abundance, following Horta2022. This is a convenience function to classify
+    stars in a dataframe. For a detailed explanation of the classification,
+    see the function chemistry_classifications.
+
+    Parameters
+    ----------
+    dataframe : pd.DataFrame
+        The input dataframe, containing the metallicity and alpha columns.
+    metallicity_column : str, optional
+        Name of the metallicity column, by default "[Fe/H]".
+    alpha_column : str, optional
+        Name of the alpha abundance column, by default "[alpha/Fe]".
+    output_column : str, optional
+        Name of the output column, by default "Population by Chemistry".
+    return_full : bool, optional
+        If True, return the full dataframe with the classification column added,
+        otherwise return only the classification column as a separate dataframe,
+        by default True.
+    overwrite : bool, optional
+        If True, overwrite the output column if it already exists, by default True.
+    **kwargs
+        Additional keyword arguments to pass to the chemistry_classifications function.
+
+    Returns
+    -------
+    pd.DataFrame
+        The output dataframe. Either the full dataframe with the classification
+        column added, or only the classification column, depending on the value
+        of return_full.
+    """
+
+    metallicity = dataframe[metallicity_column]
+    alpha = dataframe[alpha_column]
+
+    classification = pd.DataFrame(
+        [chemistry_classfications(m, a, **kwargs) for m, a in zip(metallicity, alpha)],
+        columns=[output_column],
+    )
+
+    if return_full:
+        if overwrite and output_column in dataframe.columns:
+            dataframe[output_column] = classification
+            return dataframe
+        else:
+            return pd.concat([dataframe, classification], axis=1)
+    return classification
+
+
+def chemistry_classfications(
+    metallicity: float,
+    alpha: float,
+    c: float = 0.14,
+) -> str | None:
+    """
+    Classify a star into their components based on their metallicity and alpha
+    abundance, following Horta2022.
+
+    Parameters
+    ----------
+    metallicity : float
+        The [Fe/H] metallicity of the star.
+    alpha : float
+        The [alpha/Fe] abundance of the star.
+    c : float, optional
+        Thin disk - thick disk separation [alpha/Fe] value for low metallicity stars.
+        The value changes by a linear funtion of metallicity for higher metallicity
+        stars, defined as A * [Fe/H] + B. A and B are calculated from the values in
+        Horta2022, and hardcoded here for simplicity. The default is 0.13.
+
+    Returns
+    -------
+    str | None
+        The classification of the star, either "Thin Disk", "Thick Disk", or "Halo".
+        If the classification is not possible, because metallicity or alpha are NaN,
+        return None.
+
+    """
+    A = -1 / 6
+    B = 0.1 * A + c - 0.05
+
+    if np.isnan(metallicity) or np.isnan(alpha):
+        return None
+
+    if metallicity < -1:
+        return "Halo"
+    elif metallicity < -0.8:
+        return "Thick Disk" if alpha > c else "Halo"
+    elif metallicity < -0.4:
+        return "Thick Disk" if alpha > c else "Thin Disk"
+    elif metallicity < 0.2:
+        return "Thick Disk" if alpha > A * metallicity + B else "Thin Disk"
+    else:
+        return "Thick Disk" if alpha > A * 0.2 + B else "Thin Disk"

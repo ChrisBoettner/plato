@@ -1,5 +1,6 @@
 from plato.stars.classification import (
     calculate_galactic_quantities,
+    classify_by_chemistry,
     classify_stars,
     component_probability,
     relative_probability,
@@ -13,6 +14,7 @@ from plato.stars.targets import (
 
 __all__ = [
     "calculate_galactic_quantities",
+    "classify_by_chemistry",
     "classify_stars",
     "component_probability",
     "relative_probability",
