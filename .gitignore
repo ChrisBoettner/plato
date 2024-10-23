@@ -1,3 +1,6 @@
+# exclude platopoint
+*platopoint.py
+
 # Blender
 *.blend1
 
