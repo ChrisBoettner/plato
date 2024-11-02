@@ -21,7 +21,7 @@ def set_plot_defaults() -> None:
         font_scale=4.5,
         rc={
             "figure.figsize": (18.5, 10.5),
-            "axes.grid": True,
+            "axes.grid": False,
             "font.family": "serif",
             "font.serif": ["Computer Modern Roman"],
             "text.usetex": True,
