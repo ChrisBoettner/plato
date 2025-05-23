@@ -1,0 +1,9 @@
+TESS_TOI.csv
+	A list of TESS Planet Candidates from the Target of Interest (TOI) list. Downloaded 2025-05-20 from exoplanet archive, with flag
+	set to only include Planet Candidates and Ambiguous Planet Candidates. See header of file for more information.
+
+tess_targets.fits (WIP): 
+	TESS TOI Planet Candidates (date: 2025-05-20) crossmatched with Gaia DR3 (see WIP_TESS_01_query_gaia.ipynb notebook for details)
+	
+tess_targets.csv (WIP): 
+	TESS TOI Planet Candidates processed (see WIP_TESS_02_crossmatch_and_process.ipynb notebook for details, also more extended PLATO readme in data/processed/)

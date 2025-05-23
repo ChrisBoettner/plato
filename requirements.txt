@@ -1,5 +1,6 @@
 astropy==6.0.0
 astroquery==0.4.7
+astrobase==0.5.3
 galpy==1.9.2
 h5py==3.10.0
 matplotlib==3.8.3
@@ -9,3 +10,4 @@ polars==0.20.30
 scipy==1.13.1
 seaborn==0.13.2
 tqdm==4.66.2
+
